@@ -1,0 +1,3227 @@
+This is the developer documentation for the 115 social network app
+React App Documentation
+
+Content:
+Setup
+Deployment Configuration
+App.tsx
+UserContext
+ContextsProvider
+API Service - useNetworkRequest
+HubConnection
+Login Process
+Pages
+Overarching Components
+Modal Context & Components
+Post Components
+Image Components
+Global Components
+Files Components & Uploading Files Functionality
+Notification Components
+Toast Components
+Home Page & Components
+Channels Page & Components
+Profile Page & Components
+Chat Page & Components
+Message Components
+Other Pages
+Jitsi - Voice & Video Implementation
+Utilities
+Custom Hooks
+Translation
+Storybook - Interactive Components Explorer
+Cypress - End to End Tests
+Analytics
+Electron
+Setup
+
+The 115.1 application is written in TypeScript, and makes use of the React Library, and created via the create-react-app environment.
+To run the application, follow these steps:
+1. Download Node 16.16.0
+This application runs on the latest Long Term Support (LTS) version of node as of the 28th of July 2022, node 16.16.0, which can be found here. To run the application in the expected behaviour, first download this version of node. Manage node versions with the Node Version Manage (nvm) is encouraged.
+Switch to the correct version of node via the following command:
+nvm install 16.16.0
+nvm use 16.16.0
+
+
+2. Download external dependencies
+This application uses Yarn to manage the external dependencies, therefore installing yarn is also highly encouraged. Guide to installing yarn is available here.
+After installing yarn, install the external dependencies as listed on the package. json file with the following command:
+cd SPA
+yarn install
+
+
+3. Run the application
+Running the application requires the following environment variables:
+Key
+Purpose
+Value
+REACT_APP_SSO_LOGIN_URL
+To use the Core API
+Refer to the Deployment Config for environmental variables
+REACT_APP_MESSAGES_HUB_API
+To use the Messenger Hub Connection
+
+
+REACT_APP_UPLOAD_SERVER_URL
+To use the Messenger API
+
+
+REACT_APP_MEETING_URL
+To use the Jitsi server
+
+
+REACT_APP_FIREBASE_OPTIONS
+To use Firebase Push Notification
+
+
+REACT_APP_VAPID_KEY
+
+
+REACT_APP_SHORT_COMMIT_HASH
+For analytics
+
+
+
+
+Run this command along with the above dependencies:
+yarn start
+
+
+4. Permanent branches
+master - For deploying the updated application to the end user
+release-staging - A staging release for internal testing
+development - A development release for developer (internal) testing
+electron - For compiling desktop applications
+
+
+Deployment Configuration
+
+Build and Deploy to Production (master branch)
+deploy-production.yml
+Deploy the latest commit in the master branch. Will automatically deploy when a new release tag is provided.
+Successful deployment can be found on https://web.115one.app/
+
+Build and Deploy to Staging (release-staging branch)
+deploy-staging.yml
+Deploy the latest commit in the release-staging branch. Will automatically deploy when a new commit is provided in the branch.
+Successfully deployment can be found on https://web-staging.115one.app/
+Deploy the latest storybook commit in the release-staging branch, and the successful storybook deployment can be found on https://storybook-dev.115one.app/
+
+Build and Deploy to Development (development branch)
+deploy-development.yml
+Deploy the latest commit in the development branch. Will automatically deploy when a new commit is provided in the branch.
+Successfully deployment can be found on https://web-dev.115one.app/
+
+Commit hash: Note for Julius
+
+App.tsx
+
+The App.tsx is the main entry point to the application, where overarching application configurations, user details (UserContext), other overarching contexts (ContextsProvider) and Page routes are defined.
+
+Navigation
+The application uses BrowserRouter to navigate between pages, and retrieves the specified component in Route when the path is called. In this application, custom PrivateRoute and LoggedInRedirect components are created to extend the functionalities of Route, with redirect and user accessibility checks.
+
+Custom Route Components
+PrivateRoute
+A component extending Route that checks if a user token is available in the UserContext. If yes then it will return the specified component, if not then the LoginRedirect takes over.
+LoggedInRedirect
+A component extending Route that checks if a user token is available in the UserContext. If yes then it will redirect to a specified directory declared in PrivateRoute, if not then it will return the specified component. In this application, only the LoginPage is declared via the LoggedInRedirect component, and the redirect is to HomePage when the User object is available upon logging in.
+
+Custom Redirect Components
+LoginRedirect
+Custom component extending Redirect to specify the redirect original path if available.
+
+UserContext Declaration
+This is also where the UserContext Provider is declared, such that all child components within the context are able to access the context without nesting props manually at every level. Prior to providing the initial User object state in the Provider, App.tsx will first attempt to deserialize the converted string (where the User object is stored as a string) in the LocalStorage via the desearlizeUser function, to determine whether there is an existing User object. If there is, then the Provider will initially return the existing one after deserializing.
+Refer to UserContext section for the setup and functionalities of the context.
+
+ContextsProvider
+On top of the UserContext, there is also a list of overarching contexts declared in App.tsx, prior to loading the initial page. They are separated by their corresponding functionalities within the application, and can be referred to in the ContextsProvider section.
+UserContext
+
+The UserContext is a crucial part of the application, where User information is provided, and can be modified throughout the user journey.
+The UserContext stores the current form of the User object both locally in the useState hook for local reference, and in the LocalStorage for references after the application is closed, under the StorageRoutes.Users(), whilst handling state updates in the useUserContextState custom hook.
+User - Custom Object
+The User object contains the following:
+Param
+Type
+id
+string
+username
+string?
+first_name
+string
+last_name
+string
+profile_picture
+Picture
+token
+string?
+location_id
+number?
+permissions
+UserPermission[]?
+
+String Enum UserPermission
+Name
+String Value
+Support
+support
+
+
+More will be added to the enum as the application develops.
+roles
+UserRole[]?
+
+String Enum UserRole
+Name
+String Value
+CreateChannels
+create_channels
+
+
+More will be added to the enum as the application develops.
+
+
+The User object also has a downsized object called LoggedInUser designed to add missing elements to the User object when made available, in this case right upon logging in, and the object is as defined:
+
+LoggedInUser
+Param
+Type
+id
+string
+first_name
+string
+last_name
+string
+location_id
+number
+permissions
+UserPermission[]
+roles
+UserRole[]
+
+
+useUserContextState
+The User object content will be modified throughout the application, and the useUserContextState will handle the state management based on functional calls within the hook, and the available functions are as follows:
+Function
+Purpose
+Usage
+updateUser: (user?: User) => void
+Update the User object in its entirety
+Update user on login (LoginBlock), on modify user details (ProfileEditForm), and check if user token is valid LoginPage
+updateLoggedInUser: (loggedInUser: LoggedInUser) => void
+Provide missing information to the User object upon successful login
+useNavBodersServices
+updateToken: (token: string) => void
+Provide an updated token to the User object
+networkRequest and HubConnection
+updateProfile: (picture: Picture) => void
+Update the profile image
+ProfilePage
+removeUser: () => void
+Sign out of the application
+networkRequest, HubConnection and Sign Out Dropdown on top right of TopBar
+
+
+
+
+ContextsProvider
+
+A component to provide all the non User contexts to be consumed in the application, including the following:
+
+ActivityContext
+A context to store all the activities happening in the application. This is usually to inform the application of any asynchronous function calls that are happening, to allow the application to perform variation actions, including appending loading spinners for images that are loading for Base64, post pagination detection in the HomeBox and disabling message actions before a message thread is fully loaded, in the ChatBox. The usage for the activity context is universal, but in this application it is generally used for appending loading spinners and temporarily disabling functionalities.
+useActivityContextState
+The useActivityContextState is a custom hook that stores the available object and functions, defined as an ActivityState, and contains the following:
+Param
+Type
+activities
+ActivityDict, a dictionary with key as Activities (string enum) and value as boolean
+
+
+Function
+Purpose
+Usage
+startActivity: (activity: Activities) => void
+Add a new activity to the dictionary
+Called at the beginning of an asynchronous function
+removeActivity: (activity: Activities) => void
+Remove an activity from the dictionary
+Called at the end of an asynchronous function
+
+
+buildKey
+A function that builds a unique key, based on providing the type of Activities, and a string id. This is used for loading in chats for example, where the getMessages API may be called to load messages in multiple threads simultaneously, such that the same Activity repeats. buildKey prevents this by allowing an extra unique variable to be used, in this case the thread id.
+useKeyMemo
+A hook that generates a unique id without the need to pass an existing string id like buildKey. useKeyMemo extends from useMemo and it is used for the operations of activities that repeat frequently. Currently, this is implemented for Base64, where the same image may appear more than once on screen simultaneously, and thus requiring ids more unique and the Picture id.
+In this example, picture id is used as a dependencies rather than an argument, so that as long as the next image do not share the same id as the previous one, a new unique id is generated.
+
+ToastContext
+A context to store all the Toasts in the application. The Toast components show up in the NavBoders under the ToastContainer component, and the ToastContext provides the list of toasts to append in the application.
+useToastContextState
+The useToastContextState is a custom hook that stores the list of toasts and functions, defined as a ToastState, and contains the following:
+Param
+Type
+toastList
+Toast[]
+
+
+Function
+Purpose
+Usage
+addToastToList: (toast: Toast) => void
+Add a new toast to the toastList array
+When a toast is called. Some ways a toast is called include successfully sending invites in InviteConnectionsModal, managing channel admins in ChannelMembersModal, message notification in onReceivedNewMessageFactory, and API returning errors.
+removeToastToList: (toast: Toast) => void
+Remove a toast from the toastList array
+To dismiss a toast from the screen, either automatically 3 seconds after appearance, or manually dismissing it, by swiping or closing a ToastBox.
+
+
+ModalContext
+A context to append or dismiss pop-up modals for global components. Note that this context is only for modals that do not belong to a specific page. For page specific modal contexts refer to Page specific modal context. In general, the modal component within the GlobalModalState object is either a JSX.Element or undefined. The default is undefined and thus will not limit user interaction. When a modal is triggered, the JSX.Element is defined, and the JSX.Element can retrieve the needed properties by passing them in a functional call defined in the useModalContextState. The context provides a close function that will set the modal back to undefined when called.
+useModalContextState
+The useModalContextState is a custom hook that stores the defined/undefined modal, and provide definition to functions, defined as a GlobalModalState, and contains the following:
+Function
+Target Return Modal
+leaveWarning: () => void
+YesNoConfirmationModal
+signOut: () => void
+contactSupport: () => void
+ChatWithSupportModal
+
+
+ChannelContext
+A context to store all channel related information for the user. The main purpose of the ChannelContext is to store the list of channels where the user is an admin or a member, and store the active (selected) channel (Channel) when available. The active channel is defined by the channel that is showing on the screen currently in ChannelsPage, usually by user toggling it from the list in ChannelsRightPanel, or directly from the url. The ActiveChannel object extends beyond the Channel object, and contains information on the list of channel admins and members, and their role in the active channel. The active channel is set to undefined by default, and will only be defined when it is selected from a list or based on the url, and will become undefined when the user exits the page.
+The data for channels, activeChannel and functional calls to change the data in the context are defined in the useChannelContextState.
+Channel
+Param
+Type
+id
+string
+name
+string
+description
+string
+member_count
+number
+location
+Location?
+cover_image?
+Picture
+privacy
+ChannelPrivacy
+
+String Enum ChannelPrivacy
+Name
+String Value
+Public
+public
+Private
+private
+
+
+
+visibility
+ChannelVisibility
+
+String Enum ChannelVisibility
+Name
+String Value
+Visible
+visible
+Hidden
+hidden
+
+
+
+can_edit
+boolean
+can_join
+boolean
+can_post
+boolean
+can_leave
+boolean
+can_invite
+boolean
+
+
+ActiveChannel
+Param
+Type
+channel
+Channel?
+channelRole
+
+ChannelRole
+Param
+Type
+isMember
+boolean
+isAdmin
+boolean
+
+
+
+channelAdmins
+ChannelAdmin[]
+channelMembers
+ChannelMember[]
+
+
+ChannelMember & ChannelAdmin
+Param
+Type
+id
+string
+name
+string
+profile_picture
+Picture?
+can_remove
+boolean
+connection_count
+number
+country
+string
+
+
+useChannelContextState
+The useChannelContextState is a custom hook that stores the channels and activeChannel, and provide definition to functions, and contains the following:
+Param
+Type
+Purpose
+channels[]
+Channel[]
+Stores all channels a user is an admin or member of
+adminChannels[]
+Stores all channels a user is an admin
+memberChannels[]
+Stores all channels a user is a member of
+activeChannel
+ActiveChannel
+Stores the current (active) channel that the user is viewing
+
+
+
+Function
+Purpose
+Usage
+updateChannelInfo: (channel: Channel) => void
+Update the information of a specific channel. It will update the information in the channels, adminChannels and memberChannels list, and the activeChannel.
+In the ChannelEditForm for admins to update the channel information when it is the activeChannel
+updateChannels: (adminChannels: Channel[], memberChannels: Channel[]) => void
+Retrieve member and admin channels initially and add it to the context
+In NavBorders and useChannelsServices
+updateChannelCover: (channelId: string, picture: Picture) => void,
+Update the cover for the activeChannel
+UpdateChannelCoverModal
+addChannelToList: (channel: Channel) => void
+Add channel to the list when the user has joined a public channel, or accepted an invitation
+NewChannelForm (create new channel) and ChannelDisplay
+removeChannelFromList: (channelId: string) => void
+Remove a channel from the list
+ChannelDisplay
+setActiveChannelInfo: (channel: Channel) => void
+Update the channel object in ActiveChannel
+useChannelsInitialServices
+setActiveChannelRoleAdmin: (isAdmin: boolean) => void
+Update the isAdmin boolean in channelRole in ActiveChannel
+useSelectedChannelServices
+setActiveChannelRoleMember: (isAdmin: boolean) => void
+Update the isMember boolean in channelRole in ActiveChannel
+setActiveChannelAdmins: (channelAdmins: ChannelAdmin[]) => void,
+Add all the admins in the ActiveChannel
+setActiveChannelMembers: (channelMembers: ChannelMember[]) => void,
+Add all the members in the ActiveChannel
+removeActiveChannel: () => void
+Remove the ActiveChannel entirely
+useChannelsInitialServices
+
+
+
+HubConnectionContext
+
+ConnectionContext
+A context to store Profile information of all members that the user engages with, based on the members listed in every MessageThread. The context stores the available profiles as a ProfileDict, which is a Dictionary of Profile (Dict<Profile>). The context calls the useConnectionContextState to provide definition to objects and functions within the context.
+useConnectionContextState
+A custom hook that stores the dictionary of Profile, and the associated addConnections function to add missing profiles into the dictionary.
+Param
+Type
+Purpose
+connections
+ProfileDict
+Stores all available profiles
+
+
+Function
+Purpose
+Usage
+addConnections: (ids: string[]) => void
+To read through every memberIds in a thread to determine whether their full profile exists, as a Profile object, by matching each id to the keys in the ProfileDict. Any missing profile ids will be sent to the getMessageUsers API call, where the profiles are fetched and added to the existing connections dictionary.
+In the MessageThreadName component, the first entry points to existing and new threads.
+
+
+NotificationContext
+A context to store all notifications from the Core API, so that it can be accessed anywhere throughout the application. The context stores all notifications under the notificationList array, and displays it via the NotificationPanel. The context calls the useNotificationContextState to provide definition to objects and functions within the context.
+useNotificationContextState
+A custom hook that stores the available array of Notification, and their associated functions to add or modify notifications.
+Param
+Type
+Purpose
+notificationList
+Notification[]
+Stores all notifications
+notificationToggled
+boolean
+Determine whether to reveal the NotificationPanel inside RightPanelComponent
+hasUnreadNotification
+boolean
+Determine whether to pop a red dot in the notification button on the TopBar
+isInitialLogin
+boolean
+If it is the first context call upon logging it, or opening the application initially if already logged in, pop a ToastBox alert if there are unread notifications.
+
+
+Function
+Purpose
+Usage
+updateNotificationList: (notificationList: Notification[]) => void
+Get all notifications via the getNotifications API initially and add to the notificationList
+In NavBorders under useNavBordersServices
+addNewNotificationsToList: (newNotifications: Notification[]) => void
+Attempt to get new notifications every 20 seconds with the getNotifications API, if there are any then add to the notificationList
+togglePanel: () => void
+To alter the notificationToggled boolean value, for revealing/closing NotificationPanel
+In NotificationPanel and TopBar
+markAsRead: (notificationId: string) => void
+To mark a notification as read on click a NotificationDisplay
+In NotificationPanel and ChannelsComponent
+setHasUnreadNotification: (hasUnreadNotification: boolean) => void
+To alter the hasUnreadNotification boolean value, for determine the appearance of a red dot
+In NavBorders under userNavBodersServices, and TopBar
+
+
+MessageNotificationContext
+A context to store new incoming messages notification, stored as a dictionary of booleans under messagesNotification, where the key is the messageThread.id, to correspond to a new notification for that thread, and the value is a boolean, to represent whether there are notifications for that key. In this case it is always true, as the key value pair is removed entirely on destroying the notification.
+useMessageNotificationContextState
+A custom hook to store the messagesNotification, and the associated functions to modify the dictionary, defined as a MessageNotificationState, and contains the following:
+Param
+Type
+messagesNotification
+Dict<boolean>
+
+
+Function
+Purpose
+Usage
+startMessagesNotification: (messageNotification: string) => void
+Add a new notification to the messagesNotification dictionary, with MessageThread id as the key, and true as the value
+onReceivedNewMessageFactory in NavBorders
+destroyMessagesNotification: (messageNotification: string) => void
+Remove the key value pair from the dictionary entirely, by matching the incoming key and the key in the dictionary
+MessageHead
+
+
+
+MessageThreadContext
+A context to store all the messaging data, so that it can be accessed anywhere throughout the application. The context stores all the threads the user is in, under messageThreads, and the currently selected thread, under activeMessageThread, which will be defined when the user clicks on a thread in the Chat page. The activeMessageThread resets to undefined when the user navigates away from the Chat page entirely, or by creating a new chat under NewChatBox. It will be redefined as the user selects another thread in the messageThreads list.
+useMessageThreadContextState
+The useActivityContextState is a custom hook that stores the available object and functions, defined as an MessageThreadState, and contains the following:
+Param
+Type
+messageThreads
+MessageThread[]
+activeMessageThread
+MessageThread?
+
+
+Function
+Purpose
+Usage
+updateMessageThread: (messageThread: MessageThread) => void
+Update a specific Message Thread
+Unused
+updateMessageThreads: (messageThreads: MessageThread[]) => void
+Get all the current threads via the getMessageThreads API and update the messageThreads array
+In NavBorders under useNavBorderServices, called on every page
+setActiveMessageThread: (activeMessageThread?: MessageThread) => void
+Assign a specific thread to be the activeMessageThread, and assign it to be undefined
+In useChatViewActions, when a user navigates in or out of a thread, either by url or on screen interaction
+newMessageOnThread: (id: string, message: Message) => void
+Add a new message to any thread in the messageThreads. If the thread is not already defined, add the new thread to messageThreads list.
+When user sends a new message in ChatBox or NewChatBox, when other members send a message and it is received by the HubConnection and handled via the onReceivedNewMessageFactory
+updateMessageOnThread: (id: string, message: Message) => void
+Edit an existing message to any thread in the messageThreads, created by the user
+When a user edits an existing message in the ChatBox or NewChatBox, or deletes an image via the ImageModal
+newMessagesOnThread: (id: string, messages: Message[]) => void
+Get all the messages in a thread via the getMessages API and update the messageThreads array
+When a thread is selected, all the messages are returned, as opposed to the getMessageThreads API which will only return the last message
+newMessageThread: (messageThread: MessageThread) => void
+To add a new thread to the messageThreads array
+Used in the useNewChat hook for NewChatBox
+addTypingMemberOnThread: (typingMembers: Typing, timeout: NodeJS.Timeout) => void
+Update the typingMembers param in a specific thread in the messageThreads array
+Used in ChatBox to indicate any members that are currently typing, based on information retrieved from the HubConnection handled via onTypingFactory
+removeTypingMemberOnThread: (typingMembers: Typing) => void
+Remove a typing member in the typingMembers dictionary in a specific thread
+Called automatically one second after addTypingMemberOnThread is called
+removeMessageFromThread: (id: string, messageId: number) => void
+Removes a message from a thread in the messageThreads array
+Used in ChatBox and NewChatBox, when the user deletes a message they sent
+readMessage: (messageThreadId: string, messageId: number, userId: string, countdown: Countdown) => void
+Deprecated
+N/A
+
+
+
+
+
+
+API Service - useNetworkRequest
+
+The ApiService is a class component that contains all available asynchronous functions called in the application. This includes both calls to the Core API, and to the Messenger API. The baseURL and headers are requested to call a new instance of the ApiService class, and this is used in combination with the useNetworkRequest hook to provide an API service throughout the application.
+
+ApiService
+A class component where every API call within the class has its own function, that includes an endpoint, call method, the necessary body to be passed to the HTTP request, and the expected Promise eventual return type.
+
+useNetworkRequest
+A custom hook that can be called in any React components to perform API calls within the ApiService class, that handles fallback to retrieve new token and retry the API calls when it is unauthorised due to expired token, or logs out if the parsed token is still invalid.
+In this application, the useNetworkRequest is usually called higher up in the tree, whereas smaller components will require the class to be passed in as functional props, for the purpose of generating mock responses for Storybook components.
+
+The Available Core APIs (Base URL is the REACT_APP_SSO_LOGIN_URL)
+API Call Name
+Expected Response
+Purpose
+Restrictions
+getOnce
+
+
+Caching responses
+
+
+login
+LoginResponse
+Deprecated
+
+
+getUser
+LoggedInUser
+Retrieve further information about the user on successful login
+
+
+createQRCode
+string
+Create a QR code with the returned string to enable Desktop sign in via the mobile app
+
+
+loginWithQRCode
+LoginWithQRCode
+Gets hit every second, either returns the User object, or an updated QR code based on login status
+
+
+getMe
+User
+Returns personal information, used in Login page to determine login status
+
+
+refresh
+LoginResponse
+Retrieve updated access token and updated User object
+
+
+getImagePath
+string
+Retrieve image url based on the id in a Picture
+
+
+getBase64
+string
+Retrieve the Base64 decoded image
+
+
+getPost
+Post
+Retrieves a specific post
+
+
+getPosts
+PostResponse
+Retrieves the latest 20 posts in the server
+
+
+getMorePosts
+Retrieves the next 20 posts in the server based on the query string from the previous PostResponse
+
+
+sendPost
+Post
+Adds a new post to the server
+
+
+editPost
+Updates an existing post in the server
+Post creator only
+editPostType
+Updates the post type of an existing post in the server
+deletePost
+number
+Removes an existing post from the server
+getPostComments
+Comment[]
+Retrieves all comments in a post
+
+
+sendComment
+Comment
+Adds a new comment related to a post in the server
+
+
+editComment
+Edits an existing comment
+Post creator only
+deleteComment
+number
+Removes an existing comment
+likePost
+Post
+Sends a like reaction to a post
+If the user has not liked the post
+unlikePost
+Removes a like reaction from a post
+If the user has liked the post
+getLikePostList
+FullProfile[]
+Gets all the profiles who liked a post
+
+
+prayProst
+Post
+Sends a pray reaction to a post
+If the user has not prayed the post
+unprayPost
+Removes a pray reaction from a post
+If the user has prayed the post
+getPrayPostList
+FullProfile[]
+Gets all the profiles who prayed a post
+
+
+praiseProst
+Post
+Sends a praise reaction to a post
+If the user has not praised the post
+unpraisePost
+Removes a praise reaction from a post
+If the user has praised the post
+getPraisePostList
+FullProfile[]
+Gets all the profiles who praised a post
+
+
+likeComment
+Comment
+Sends a like reaction to a comment
+If the user has not liked the comment
+unlikeComment
+Removes a like reaction from a comment
+If the user has liked the comment
+getChannel
+Channel
+Retrieves a specific channel
+
+
+getChannelSuggestions
+Channel[]
+Retrieves suggested channels
+
+
+searchChannels
+Retrieves all channels that match the input
+
+
+getChannels
+Retrieves all channels that the user is a member of
+
+
+getChannelsWithAdminAccess
+Retrieves all channels that the user is an admin
+
+
+getChannelInvitationNotification
+Notification[]
+Retrieves all notifications that are of channel invitations
+
+
+getChannelPosts
+Post[]
+Retrieve all posts within a specific channel
+
+
+getChannelLatestPosts
+Deprecated
+
+
+getChannelInvitation
+ChannelInvitation
+Determine whether the user has been invited to a specific channel
+
+
+getChannelMembers
+ChannelMember[]
+Retrieve the list of members in a channel
+
+
+getChannelAdmins
+ChannelAdmin[]
+Retrieve the list of admins in a channel
+
+
+makeChannelAdmin
+string
+Make a channel member an admin of a channel
+Channel admin only
+removeChannelAdmin
+Remove a channel admin from the admin role of a channel
+removeChannelMember
+Remove a member from the channel entirety
+joinChannel
+number
+Join a public channel
+Only if the channel privacy is public, and the user is not already a member
+acceptInvitation
+Accept the invitation to join a channel
+
+
+rejectInvitation
+Reject the invitation to join a channel
+
+
+leaveChannel
+Leave a channel
+If the user is already a member
+createNewChannel
+Channel
+Create a new channel
+If the UserRole of a User contains the CreateChannels value
+editChannel
+Channel
+Edit an existing channel
+If the user is an admin of the channel
+
+
+deleteChannel
+Channel
+Remove an existing channel
+sendInvitation
+ChannelInvitation
+Send invitation to another user to join a channel
+Is the user is a member of the channel
+getPersonalProfile
+FullProfile
+Retrieve the full profile of the user
+
+
+editPersonalProfile
+Edit the user’s full profile
+
+
+getProfile
+Retrieve the full profile of an existing member
+
+
+getProfilePosts
+Post[]
+Retrieve all posts created by the member
+
+
+getProfileChannels
+Channel[]
+Retrieve all channels that the member is a member of admin of
+
+
+getProfileStats
+ProfileStats
+Retrieves the number of posts a member has made categorised by the PostType.
+
+
+searchLocation
+Location[]
+Retrieve the first 20 locations based on the input
+
+
+searchProfiles
+SearchResultProfile[]
+Search profiles for sending channel invitations
+
+
+searchThreadProfiles
+Profile[]
+Search profiles to add to a new message thread
+
+
+getNotifications
+Notification[]
+Retrieve all notifications, and any new notifications based on the last notification id
+
+
+getNotificationsDate
+New API from Taner
+
+
+
+
+markNotificationAsRead
+Notification
+Change the is_read value from false to true in a Notification
+
+
+uploadProfilePicture
+Picture
+Change the profile image
+
+
+uploadBackgroundPicture
+Change the profile background
+
+
+uploadChannelCover
+Change the channel cover
+Channel admin only
+sendAnalytics
+AnalyticsResponse
+Send analytics to the server
+
+
+
+
+The Available Messenger APIs (Base URL is the REACT_APP_UPLOAD_SERVER_URL)
+API Call Name
+Expected Response
+Purpose
+Restrictions
+getMessageThreads
+MessageThread[]
+Get all the threads the user belongs in
+
+
+searchMessageThreads
+Filter the threads the user belongs in based on input
+
+
+openMessageThread
+MessageThread
+
+
+Deprecated
+
+
+newMessageThread
+Create a new message thread
+
+
+getMessages
+MessagesResponse
+Retrieve all messages within a thread
+
+
+sendMessage
+Message
+Send a new message to a thread that a user is in
+
+
+editMessage
+Edit a message
+If the message is sent by the user
+deleteMessage
+string
+Delete a message
+deleteMessageAttachments
+Message
+Delete all the attachments attached to a message
+getMessageImage
+MessageImage
+Retrieve the url for the full image, and the thumbnail, for image attachments on a Message
+
+
+getMessageUsers
+Profile[]
+Retrieve the profiles of all members of a message thread
+
+
+uploadMessageFile
+UploadMessageFile
+Upload a file imported by the user to be attached to a message
+
+
+markMessageAsRead
+string
+Update the read status of a Message
+
+
+startCall
+MessageResponse
+Begin a conference call via Jisti and sends an automated message to the thread
+
+
+setConnectionId
+
+
+Set the API call headers X-CONNECTION-ID to the passed id
+
+
+storePushToken
+
+
+Store the push token as the current access token
+
+
+
+
+
+
+
+HubConnection
+
+The purpose of the HubConnection is to establish a socket connection with listeners to multiple message related events. In this application, this includes typing indicators, incoming messages, and incoming new message threads. These connections are established such that the events are always listener, and does not require any input from the client side to receive data, like how the API Service would.
+
+Implementation
+Leave this to Paul
+
+useNavBordersHubConnection
+A custom hook called in the NavBorders to handle responses received from the HubConnection. The hook will first attempt to establish a WebSocket connection between the application and the server, and if successful will maintain the connection and have listeners ready to handle any responses that come through, which will then be handled by the functions in Utilities/factories accordingly.
+
+The Available Socket Listeners (Base URL is REACT_APP_MESSAGES_HUB_API)
+Name
+Expected Response
+Response Handler
+Purpose
+NewMessage
+NewMessageResponse
+onReceivedNewMessageFactory
+Retrieve and return new message when available
+IsTyping
+Typing
+
+Param
+Type
+timeout
+number
+messageThreadId
+string
+userId
+string
+
+
+
+onTypingFactory
+Retrieve and return the typing user id and thread id, for the TypingIndication
+NewMessageThreadCreated
+MessageThreadResponse
+onNewMessageThreadFactory
+Retrieve new message thread created by the user on another device
+MessageRead
+MessageReadResponse
+onMessageReadFactory
+Mark the message as read after it is accomplished on another device
+MessageEdited
+NewMessageResponse
+onReceivedEditedMessageFactory
+Retrieve edited message and update it on the thread
+MessageDeleted
+MessageDeleteResponse
+
+Param
+Type
+messageThreadId
+string
+messageId
+number
+
+
+
+onReceivedDeletedMessageFactory
+Retrieve deleted message id and update it on the thread
+CurrentMessageThreads
+
+
+
+
+
+
+MessageThreadHidden
+
+
+
+
+
+
+
+
+onReceivedNewMessageFactory
+Handles update when a new message is returned from the NewMessage socket.
+Adds new message to the MessageThreadContext via the newMessageOnThread function call
+Starts a message notification in the MessageNotificationContext, to alert a thread in ChatSelectionColumn that there are new messages, via the startMessagesNotification function call
+Provide an alert - If the user is already in the same thread as the incoming message in ChatBox, mark the message as read, else pop a Toast alert with ToastBox.
+onTypingFactory
+Handles update when there is someone typing in an existing thread.
+Add the new typing member to the MessageThreadContext via the addTypingMemberOnThread function call, such that the indication is displayed in TypingIndication
+Remove the typing member a second after the socket return from the MessageThreadContext via the removeTypingMemberFromThread function call
+onNewMessageThreadFactory
+Handles update where there is a new message thread.
+Add the new thread to the MessageThreadContext via the newMessageThread function call
+onReceivedEditedMessageFactory
+Handles update when there is a new edited message.
+Retrieve the index of the message thread in messageThreads in the MessageThreadContext.
+Retrieve the index of the message in that thread
+Remove the old message and replace it with a new one via the updateMessageOnThread function call in the MessageThreadContext
+onReceivedDeletedMessageFactory
+Handles update when there is a deleted message.
+Retrieve the index of the message thread in messageThreads in the MessageThreadContext.
+Retrieve the index of the message in that thread
+Update the message via updateMessageOnThread by providing a deletedAt timestamp, along with removing all attachments.
+
+
+Login Process, Page and Components
+
+The 115.1 Mobile app is required to login to the application.
+To login in the web application, first login to the mobile app with details provided in the Test data. Then following the following procedures:
+Procedure
+Image
+Tap the menu icon by the top right
+
+Tap the “Desktop sign in” option
+
+Tap “Scan QR code button”
+
+Aim the camera towards the desktop QR code
+
+
+
+The mobile application will inform the loginWithQRCode API if a QR code is successfully scanned, and then it will return the User object to the desktop, which will automatically log the user into the web application.
+
+LoginPage
+The entry point for the root directory, and the initial page on load the application, if User is not already defined. If User is defined, the LoggedInRedirect will redirect the application to the HomePage. Contains the LoginBlock which contains the login process.
+
+LoginBlock
+A component that contains the QR code and login instructions. To be used along with the 115.1 mobile app, as instructed above. The component calls the getNewQRCode callback, which will call the createQRCode API to return a qRString used to generate a scannable QR Code with the QRCode component. It will hit the loginWithQRCode API every second to determine whether the QR code has been scanned. If it has, then the API will return the User object to login the user, via the updateUser function in the UserContext.
+
+Pages
+
+The application is split into six pages, Home, Channels, Profile, Chat, Post and Call. Home appears by default and other pages can be toggled via the sidebar located on left, except for Call which can only be toggled on a selected thread inside Chats.
+
+Component Hierarchy
+Each of the six pages begin with the index.tsx in that directory, which are called by App. This file is the entry point for their respective pages. NavBorders is called and wraps the inner component, and the inner component contains the local modal Provider, and the local component.
+Each Page has their respective ModalContext provider, and their inner component, named after the page they belong to. So HomeComponent for Home, ChatComponent for Chat, and etc.
+
+Local ModalContext
+The local ModalContext is initialised in the index.tsx, and contains a respective useModalContextState custom hook that contains a modal object, that can either be a JSX.Element or undefined, and a function call for each modal to be called within the page, which will pass all the necessary properties to allow a modal component to be called, and replaces the current modal object, which can either be another modal, or undefined.
+
+Local Component
+The local Component consumes the modal defined by the ModalContext via the DashboardInner component, a universal component that will split the child into horizontal sections, with functionalities for revealing and dismissing the notification panel, append a model if defined, and contains information for the head HTML tag via the Helmet component.
+
+Pages in the Application
+Page Name
+Directory
+Purpose
+HomePage
+Tab.Home (/home)
+Landing page, view and create posts
+ChannelsPage
+Tab.Channels (/channels)
+View and interact with channels, create posts
+ProfilePage
+Tab.Profile (/profile)
+View and interact with personal and other’s profile
+ChatPage
+Tab.Chats (/chats)
+Message functionalities
+SinglePostPage
+Tab.Post (/post/<postId>)
+View a single post
+CallPage
+Tab.Call (/call/<messageThreadId>)
+Making a conference call with Jitsi
+
+
+Overarching Components
+
+GlobalBorders
+Optionally calls the NavBorders if the user is defined, used in App.tsx.
+
+NavBorders
+A component called as an outer layer of a page based component, which contains the page structure, with a vertical stack of TopBar and Dashboard, where the Dashboard component takes in a child component. This is also where toasts will appear, and any modals that do not belong to a particular page.
+The component also contains custom hooks that are called within, notably useNavBordersServices and useNavBordersHubConnection, designed to be called upon login, and when the user navigates to a different page.
+useNavBordersServices
+This hook will retrieve updated information about the user via the getUser API, and their existing channels via the getChannels API.
+This hook will also retrieve notifications initially by the getNotifications API, and continue to call the API every 20 seconds to determine whether there are any new notifications. If so it will create a toast alert which will general a toast that appears back in the NavBorders.
+This hook is also responsible for calling the useChatInitialServices hooks, to retrieve all the existing message threads that a user is in.
+useChatInitialServices
+A hook to retrieve all the available message threads, by calling the getMessageThreads API.
+
+Dashboard
+A component that displays a LeftSidebarMenu navigation bar towards the left of the component, and displays whatever children passed in for the rest of the component space. This is often used with the DashboardInner component.
+
+DashboardInner
+A component that splits the child component into three sections for desktop view, two for narrow view and one section for mobile view. An easy way to manage website responsiveness, and manage component width proportions. This works in conjunction with the dashboard-inner-component css class name. The DashboardInner component is also responsible for appending a modal when defined by the local ModalContext.
+
+TopBar
+A component called in NavBorders and is located at the top of every page. A blue bar with two located at two ends. Left is the 115.1 logo and right include a button to toggle notification, with a red dot to indicate unread status, both provided by the NotificationContext; a profile button that directs to ProfilePage, and a menu button with multiple options in a dropdown, including get support and sign out.
+
+RightPanelComponent
+A component called in the DashboardInner component and is generally used on the right of the three horizontal sections of the component, and contains the css and listener to the NotificationContext to determine when to reveal and hide the NotificationPanel.
+
+RightPanelSection
+RightPanelSection are child components for RightPanelComponent, which contains the default paddings and takes in an optional title.
+
+
+Modal Contexts & Components
+
+Home Page ModalContext - useHomeModals
+Refer to Repeated Modal Functions for all the modals used in the Home page.
+Channels Page ModalContext - useChannelModals
+Function
+Target Return Modal
+inviteConnections: (channelId: string, channelName: string) => void
+InviteConnectionsModal
+changeCoverImage: (channelId: string, files: FileList | null) => void
+UpdateChannelCoverModal
+leaveChannel: (channelId: string, channelName: string) => void
+YesNoConfirmationModal
+deleteChannel: (channelId: string, channelName: string) => void
+YesNoConfirmationModal
+viewMembers: (channelId: string, channelAdmins: ChannelAdmin[], channelMembers: ChannelMember[], isAdmin: boolean) => void
+ChannelMembersModal
+removeLocation: (removeLocationFormValue: () => void) => void
+YesNoConfirmationModal
+
+
+Profile Page ModalContext - useProfileModals
+Function
+Target Return Modal
+changeProfileImage: (profile: FullProfile, files: FileList | null) => void
+UpdateImageModal
+changeProfileBackground: (profile: FullProfile, files: FileList | null) => void
+
+
+Chat Page ModalContext - useChatModals
+Function
+Target Return Modal
+openAttachment: (threadAttachments: AttachmentItem[], selectedId: string, messageThreadId: string) => void
+ImageModal
+deleteAttachment: (messageThreadId: string, attachmentItem: AttachmentItem) => void
+ConfirmationModal
+deleteAttachments: (message: Message) => void
+ConfirmCancelConfirmationModal
+deleteMessage: (message: Message) => void
+ConfirmCancelConfirmationModal
+muteChat: () => void
+NotAvailableModal
+
+
+Single Post Page ModalContext - useSinglePostModals
+Refer to Repeated Modal Functions for all the modals used in the Home page.
+
+Repeated Modal Functions
+Some modal functions are repeated, mainly for Post and Post image related interactions, they are as listed:
+Function
+Target Return Modal
+Usage
+createPost: (postType?: PostType) => void
+CreateNewPostModal
+Home, Channels Page
+editPost: (post: Post, channelId: string) => void
+CreateNewPostModal
+Home, Channels, Profile, SinglePost Page
+editPostType: (post: Post) => void
+EditPostTypeModal
+Home, Channels, Profile, SinglePost Page
+deletePost: (postId: string) => void
+ConfirmCancelConfirmationModal
+Home, Channels, Profile, SinglePost Page
+openImage: (post: Post, selectedIdx: number) => void
+PostImageModal
+Home, Channels, Profile, SinglePost Page
+seeReactions: (postId: string, reactionCounts: ReactionCounts, directToProfile: (profileId: string) => void) => void
+ReactionsModal
+Home, Channels, Profile, SinglePost Page
+
+
+ConfirmationModal
+A general purpose confirmation modal component to confirm and cancel a request, with the ability to pass in custom confirm and cancel callbacks, and custom confirm and cancel button texts, and modal title and description. Can also optionally pass in a child component for extended description.
+Standard Storybook Link
+https://storybook-dev.115one.app/?path=/story/confirmation-modal--standard
+With Children Storybook Link
+https://storybook-dev.115one.app/?path=/story/confirmation-modal--with-description-display
+
+YesNoConfirmationModal
+Extends from ConfirmationModal with confirm button text as “Yes” and cancel button text as “No”
+
+ConfirmCancelConfirmationModal
+Extends from ConfirmationModal with confirm button text as “Confirm” and cancel button text as “Cancel”
+
+NotAvailableModal
+Extends from ConfirmationModal with confirm button text as “OK”, cancel button removed and default title and description.
+
+ChatWithSupportModal
+A modal to context support, with options to view the FAQs in an external website, and chat with support by redirecting to a chat thread in ChatPage that contains the user and the Support User.
+
+Post Components
+
+Post
+An object that contains all the information returned from the API in regards to a Post.
+Param
+Type
+Purpose
+id
+string
+identification
+body
+string
+Stores the text content
+created_at
+Date
+Creation date and time
+group
+Group
+Displays information associated with the Channel that the post belongs to
+images
+Picture[]
+To display all the images attached to this post
+owner
+Owner
+
+Param
+Type
+id
+string
+profile_picture
+Picture?
+username
+string
+full_name
+string
+
+
+
+To display basic information of the creator of this post
+type
+string enum PostType
+
+Enum
+Value
+Post
+post
+PrayerRequest
+prayer
+ThankfulFor
+praise
+StoryOfObedience
+obedience
+StoryOfSalvation
+salvation
+Baptism
+baptism
+
+
+
+Identifies the type of post. This correlates to the types from in NewPostTypeSelection.
+visibility
+string enum Visibility
+
+Enum
+Value
+Public
+public
+ConnectionOnly
+connections_only
+
+
+
+Usage is abandoned, all post visibilities are now Public.
+is_editable
+boolean
+Informs whether the user can edit the post
+is_owner
+boolean
+Informs whether the user is the owner of the post
+is_liked
+boolean
+Informs whether the user has liked the post
+is_praised
+boolean
+Informs whether the user has praised the post
+is_prayed
+boolean
+Informs whether the user has prayed the post
+like_count
+boolean
+Indicates the like reaction count
+praise_count
+boolean
+Indicates the praise reaction count
+prayer_count
+boolean
+Indicates the pray reaction count
+comment_count
+number
+Indicates the comment count
+
+
+Comment
+An object that contains all the information returned from the API in regards to a Comment.
+Param
+Type
+Purpose
+id
+string
+identification
+body
+string
+Stores the text content
+created_at
+Date
+Creation date and time
+owner
+Owner
+To display basic information of the creator of this comment
+is_editable
+boolean
+Informs whether the user can edit the comment
+is_liked
+boolean
+Informs whether the user has liked the comment
+like_count
+number
+Indicates the like reaction count
+is_updated
+boolean
+Informs whether the comment has been updated since the creation
+updated_at
+Date?
+Comment last updated date and time, if it has been updated since creation
+
+
+PostBox
+A component designed to display a Post API return object, for displaying a list of posts in HomePage, in a selected channel in ChannelsPage, a selected profile ProfilePage, and as a single post in SinglePostPage, when on click a post related notification in NotificationDisplay, and onclick the timestamp in the PostHeader.
+The PostBox component is mainly split into PostHeader, PostContent and PostFooter sections.
+PostHeader
+To display the post creator’s name, the post’s associated channel (name and icon), and provide toggle options in a dropdown menu, such as editing/delete post, view post in single post page view (on click the timestamp), and see reactions.
+PostContent
+To display the post content, and any attached images via the PostImageDisplay component.
+PostFooter
+To provide interactions for making post reactions and comments. The component also allows users to write a new comment or edit/delete an existing comment that they wrote, via the CommentSection, and make post reactions, whether to like, pray or praise a post, and reveal/close the CommentSection via the LikeCommentGrid.
+Properties and Callbacks
+PostBox is a component compacted with many functions related to a post, whether viewing as the post creator or as other users, therefore the component includes multiple callbacks and configurations so that it can be used across the application. The properties and callbacks are defined by the following:
+Param and Type
+Purpose
+post: Post
+Display all information in given post
+configOverwrite?: ConfigOverwrite
+
+Param
+Type
+showGroupInfo (always true)
+boolean?
+removeViewProfile
+revealCommentSection
+showPostFullLength
+highlightedSelectedComment
+string?
+
+
+
+Default Configuration overwrite:
+
+In SinglePostView, revealCommentSection and showPostFullLength is set to true, so that in the single post view more information is revealed at once.
+
+On click a PostComment type Notification, the related comment is highlighted by highlightedSelectedComment
+
+removeViewProfile is used when the PostBox is already appended in a ProfilePage.
+onOpenImage: (imageIdx: number) => void
+To open the image modal, initialised on every local ModalContext
+onDelete: () => void
+Called when creator intends to delete the post
+onEdit: () => void
+Called when creator intends to edit the post
+onEditType: () => void
+Called when creator intends to edit the post type
+directToSinglePostView?: () => void
+To direct to a single post in page view. Also used for viewing a post related notification
+directToProfile: () => void
+To direct to the creator’s profile
+directToChannel?: () => void
+To direct to the corresponding channel page
+seeReactions: () => void
+To view the reactions to this post
+apiService
+Contains all the API calls needed for this component
+
+
+Storybook Link
+Short Post
+https://storybook-dev.115one.app/?path=/story/post-post-box--short-post
+Post With Images
+https://storybook-dev.115one.app/?path=/story/post-post-box--post-with-images
+Long Post
+https://storybook-dev.115one.app/?path=/story/post-post-box--long-post
+
+CommentSection
+A component that lives within PostFooter that handles all the comment requests and responses attached to a post. When revealed, it will make a getComments API call to retrieve all the existing comments, indicate the quantity, and provide a textarea to create a comment. The textarea is also used to edit a comment, triggered by the dropdown menu included on each comment via the EachComment component, provided that the comment is created by the user.
+For any comment, the user can react to it by liking or un-liking it. For comments created by the user, they can also edit and delete it.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/post-comment-section--standard
+EachComment
+A component to display a Comment object, used under CommentSection. It will display the comment profile, name and content. The component uses the useCommentServices hook to determine and change the like/unlike status of a comment, and the on hover interactions.
+useCommentServices
+Split into a useState for LikeStatus and another useState for hover interactions under EachCommentState. The LikeStatus include the like_count and is_liked (by user), and essentially makes changes based on the like and unlike interaction from the user for that comment. EachCommentState is for hover interaction, where an options icon appears on hovering the component. If the user has clicked the options icon whilst hovering over, it will open the dropdown menu, whilst pointing the cursor away from the component will no longer remove the icon and the dropdown, allowing the user to continue to interact with the dropdown menu.
+
+PostImageModal
+An interactive component designed to be triggered with an image that conforms to the Picture object type is provided, split into header, PostImageModalContent, and ImageModalFooter. The header is nested within PostImageModal and will display basic information, including post creator’s name and post created date, along with a close modal button.
+PostImageModalContent
+A space to display the full image in its original aspect ratio, and left and right buttons to swap images within a Post.
+ImageModalFooter
+A shared component for PostImageModal and ImageModal (for Chat), designed to control the zoom scale of the image in the modal.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/post-post-image-modal--standard
+
+CreateNewPostModal (Includes Edit Post Functionality)
+The CreateNewPostModal is a modal for users to compose a new post, or to edit an existing post. The procedures for composing a new post consists of selecting a post type, based on the list of PostType, selecting a designated channel, type the post content, and optionally upload image attachments.
+NewPostInitialProps: Initialising properties on open the modal
+The NewPostInitialProps is an object of optional properties that allow them to be passed into the modal externally, and the modal will alter its state based on the passed properties.
+Param and Type
+Purpose and View
+postType?: PostType
+Initial the post type on open the modal via the NewPostTypeSelection. Available in Desktop view in HomePage and ChannelsPage.
+
+If postType is provided, the modal will display the textarea for composing, and buttons to upload files, post and cancel post. Or else, it will display a page to select postType, in similar style to EditPostTypeModal.
+editPost?: Post
+Editing an existing post created by the user. Available in Home, Channel, Profile and SinglePost Page.
+
+If editPost is defined it will also show the identical screen to when postType is defined, but with textarea and ExistingFilesPreview filled with existing post content.
+channel?: Channel
+Initial the channel on open the modal. Available in the Channel page.
+
+If a channel is provided, the modal will display the composition window identical to when postType is defined, if not it will display a list of channels that the user is in, and a search bar to search all channels in the application, prompting the user to select one.
+
+
+Create New Post Flow
+1. Select Post Type
+Selecting the post type is the first procedure to craft a new post. Post type selection can be done externally and passed into the modal as an initial prop (NewPostInitialProps.postType), or selected internally in the modal. For Desktop view, this is selected externally via the NewPostTypeSelection component, whereas in Mobile view, this is selected internally, and the modal opens with a pencil IconButton, located inside HomeBox for Home Page, and in ChannelDisplay for Channel page.
+Storybook Link (when postType is not defined)
+https://storybook-dev.115one.app/?path=/story/post-create-new-post--select-post-type
+2. Select Channel
+Selecting the channel that the post belongs to is the next procedure. The modal will prompt the user to select a channel to post to once the PostType is initialised. The channel can also be passed in externally as an initial prop (NewPostInitialProps.channel). Channel will be initialised if a new post is triggered under the Channels Page, when viewing a selected Channel. Or else, the channel will not be defined.
+After selecting a channel, the modal will reveal the textarea and attachments container. Channel can be modified by clicking the ChannelSelectButton about the textarea.
+Storybook Link (when channel is not defined)
+https://storybook-dev.115one.app/?path=/story/post-create-new-post--select-post-community
+3. Crafting the Post
+Crafting the post is the final procedure. In this step, the user can type in the textarea, and optionally upload image attachments. This can be done by the Add Image button, or via DragAndDrop. On adding images, the images will be displayed in the modal via the FilesPreview component. Then, click the Share button to share the post via the sendPost function and close the modal. The Share button is disabled when the post content is empty, and when images are still uploading.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/post-create-new-post--crafting-post
+
+Edit Post Flow (Only for posts created by the user)
+On edit a post, the existing content will be displayed in the textarea, and the existing images will be displayed via the ExistingFilesPreview component. Edit post uses the same modal as CreateNewPostModal, and the content is initilaised via the NewPostInitialProps.editPost object.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/post-create-new-post--editing-post
+
+EditPostTypeModal
+A modal to edit the postType on a Post created by the user. The modal includes all the available post types, with the current one highlighted by a darker background. Users can select a different one before changing it by pressing the Confirm button. The Confirm button is disabled if the selected post type equals to the post type in the existing post.
+StorybookLink
+https://storybook-dev.115one.app/?path=/story/post-edit-post-type-modal--standard
+
+ReactionsModal
+A modal to view all the reactions available on a selected post, whether from the post creator or other users. The modal is split into three categories, Like count, Prayer count and Praise count, corresponding to the three ways to react to a Post.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/post-reactions-modal--standard
+
+NewPostTypeSelection
+A vertical component to list out all the available post types, as listed in the PostType num, for users to create a new post. Used in Home page and Channels page, and contains a callback function with the select post type as the return response.
+
+Post Related API Functions
+sendPost
+A function that hits the sendPost API, and takes in a callback to return a new Post, and reset the state of the post creation component, in this case the CreateNewPostModal. Also hits the analytics API for creating a new post.
+sendEditPost
+A function that hits the editPost API, and takes in a callback to return an updated Post, and reset the state of the post edit component, in this case the CreateNewPostModal.
+sendEditPostType
+A function that hits the editPostType API, and takes in a callback to return an updated Post, and reset the state of the post creation component, in this case the EditPostTypeModal.
+deletePost
+A function that hits the deletePost API, and takes in a callback to remove the post from the list, and a reset state.
+
+Post Related Interface Functions
+onUpdateNewPost
+If the user is already in a channel when creating a post, but has allocated that post to another channel via the CreateNewPostModal, the function will redirect the user to the other channel’s page on successful creation of the post. Or else, update the state of the Post array by adding the new entry to the array.
+onUpdateEditedPost
+Updates the state of the Post array by retrieving the old post in the array, and replacing it with the new Post.
+onUpdateDeletedPost
+Removes the old post from the Post array entirely.
+
+Comment Related API Functions
+sendComment
+A function that hits the sendComment API, and takes in a callback to return a new Comment, and reset the state of the comment creation component, in this case the Textarea in CommentSection. Also hits the analytics API for creating a new comment.
+editComment
+A function that hits the editComment API, and takes in a callback to return a new Comment, and reset the state of the comment edit component, in this case the Textarea in CommentSection. Also hits the analytics API for updating a comment.
+deleteComment
+A function that hits the deleteComment API, and takes in a callback to confirm the successful deletion.
+
+Comment Related Interface Functions
+onUpdateNewComment
+Updates the state of the Comment array by adding the new Comment to the array.
+onUpdateEditedComment
+Updates the state of the Comment array by retrieving the old comment in the array, and replacing it with the new Comment.
+onUpdateDeletedComment
+Removes the old comment from the Comment array entirely.
+
+
+Image Components
+
+Base64
+Base64 is the image component in this application for all images retrieved from the Core API. This includes profile image and background, channel background, and post image attachments.
+The component takes in a Picture component, which includes the id and blur_hash. The component will first generate a blurred image by passing the blur hash into the ImageBlur component. Then, begin retrieving the image from the server via the getBase64 API call, before displaying the image onto the component. The ImageBlur will be removed from the component upon loading completion. There is also a fall back to using shimmer or loading spinner if blur hash is not available.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/image-base64--core-api
+
+MessageBase64
+MessageBase64 is the image component in this application for all images retrieved from the Message API, and this is for images attached to a message.
+The component takes in an attachment ID, and begins retrieving the image via the getBase64 component. By default, the component will return a full sized image, but can return a lower resolution thumbnail by passing in the useThumbnail argument. The Thumbnail is used for displaying images via the ImageDisplay component, and the full sized image is for when viewing each in detail. Like the Base64 component, shimmer and loading spinner animations are available, with default set to shimmer.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/image-base64--messenger-api
+
+ImageBlur
+A canvas component that will generate a low resolution and light weight blur like image based on a provided hash value. The component will decode the hash before printing the ImageData onto a canvas.
+
+
+Global Components
+
+ModalContainer
+A container component that makes consistent the style and feel of a modal. The ModalContainer returns a jsx element comprising a react-modal Modal component. We pass in some default content styles and a content label prop and an optional title prop. Also included in the ModalContainer is the CancelButtonWithTooltip. This is a combination of the Cancel button and Tooltip components which shows a message that can be altered depending on the use case. The cancelMessage prop points to an enum with four message options (close, cancel, exit, dismiss). For example, in a YesNoConfirmationModal the tooltip message shown is ‘cancel’ whereas when viewing a photo the tooltip shows ‘close’.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/post-modal-container--container
+
+WarningBox
+A component indicating that something has gone wrong, either not found or unexpected response, by replacing the expected original component with a WarningBox component. The WarningBox component takes in a title, description, an SVG image, and an optional button with action that will likely navigate the user back to the previous page or action.
+NotFound
+An extension to WarningBox for when an item is not found.
+SomethingWentWrong
+An extension to SomethingWentWrong when something went wrong.
+
+DragAndDrop
+A container component that initialises and handles drag and drop actions via the useDragAndDrop custom hook, that takes in a child component. The component is designed to wrap any child component to provide drag and drop files functionality, and provide a translucent overlay via the DraggingOverlay component when drag and drop actions are detected by the custom hook.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/file-drag-and-drop--standard
+
+IconButton
+An addition to the reactstrap Button component, with a mandatory icon svg component to be passed on the left, with an optional string for button description as the child component. Also differentiates between primary and secondary buttons. Primary is a pill shaped blue button, and secondary is light grey rectangle button with rounded corners.
+
+
+
+Files Components & Uploading Files Functionality
+
+Files Components: Displaying Uploading/Uploaded Files
+FilesPreview
+A component to display image files uploading/uploaded to the server, that is to be the part of a new post. The component takes in the UploadStatusDict, and each entry (UploadStatus) in the dictionary is displayed via the PostImagePreviewDisplay component.
+PostImagePreviewDisplay
+A component that displays a medium sized square cropped box with an image inside. If the image is uploaded, as identified by whether the Picture component is defined in the UploadStatus, it will be displayed via the Base64 component, to see how the image will look in its final form. Else, the image is displayed via the img component, and uses the local image file as the image source.
+The component also contains a ProgressBar, a small cross button on the top right corner to remove the file from the dictionary, and displays the error message if the upload process has failed.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/file-files-preview--files-preview-sample
+
+ExistingFilesPreview
+A component to display image files already attached to a post, displayed on edit a post. The component takes in an array of Picture, and displays each entry via the Base64Display component.
+Base64Display
+A component that displays the image in identical styling to PostImagePreviewDisplay, but limited to an uploaded image. Also contains a close button to remove the attachment from the list.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/file-files-preview--existing-files-preview-sample
+
+MessageFilesPreview
+A component to display attachments uploading/uploaded to the server, that is to be part of a new message. The component takes in the UploadStatusDict, where each entry in the dictionary is displayed via the MessageBase64Display or the MessageNonImageDisplay component. The getFileType function will determine whether an attachment is an image. If it is an image, it will display the image preview via the MessageBase64Display, and if not, it will display a file icon with file details via the MessageNonImageDisplay component. It also contains a close button to remove the attachment from the list.
+MessageBase64Display
+A component that displays a medium sized square cropped box with an image inside. This component will only be used when an image file is successfully uploaded, as the MessageBase64Display component is designed to only be called when UploadMessageFile within UploadStatus is defined, and when the UploadMessageFile.mimeType is an Image. It also contains a close button to remove the attachment from the list. The image is appended by the MessageBase64 component.
+MessageNonImageDisplay
+A component that displays a medium sized rectangular box with file icon, and file title and type. This component is used for both uploading and uploaded files. When the file is uploading, it will retrieve file information from UploadStatus.File, and when the file is successfully uploaded, it will replace that with information returned from the API, found in UploadStatus.UploadMessageFile. If UploadMessageFile is defined, and the returned mimeType is of enum value Image, based on the getFileType function, then the file will be displayed by the MessageBase64Display component instead. It also contains a close button to remove the attachment from the list.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/file-files-preview--message-files-preview-sample
+
+ExistingMessageFilesPreview
+A component to display an array of MessageAttachment that is already attached to a message. It will select either the MessageBase64Display or MessageExistingNonImageDisplay to display each attachment based on the mimeType. Note that MessageAttachment object contains all the parameters needed for the UploadMessageFile object, so the usage of the for each in list components are reusable.
+MessageExistingNonImageDisplay
+A component that displays a medium sized rectangular box with file icon, and file title and type. This is used for attachments that already exist in a Message. It also contains a close button to remove the attachment from the list.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/file-files-preview--existing-message-files-preview-sample
+
+ProgressBar
+A component that displays a horizontal progress bar to indicate upload progress, and targets the UploadStatus.progress number. This component is used in MessageNonImageDisplay and PostImagePreviewDisplay.
+
+Files Functionality: Handle API calls and Upload Statuses
+Uploading and uploaded files, before they are sent as attachments to a post or a message, is stored in a UploadStatusDict.
+UploadStatusDict
+A Dictionary of UploadStatus, with the identifying key as a custom string.
+The UploadStatus object contains the following:
+UploadStatus
+File extends Blob
+Param
+Type
+Param
+Type
+status
+FileStatus
+
+enum FileStatus
+Uploading
+Failed
+Complete
+
+
+
+lastModified
+number
+progress
+number
+lastModifiedDate
+Date?
+file
+File
+name
+string
+picture
+Picture?
+size
+number
+error
+string?
+type
+string
+canceler
+Canceler?
+webkitRelativePath
+string?
+messageFile
+UploadMessageFile?
+
+
+
+
+
+
+UploadMessageFile
+MessageAttachment
+Picture
+Param
+Type
+Param
+Type
+Param
+Type
+id
+string
+id
+string
+id
+string
+fileName
+string
+fileName
+string
+file_id
+string
+mimeType
+string
+mimeType
+string
+blur_hash
+string
+ownerId
+string
+ownerId
+string
+ratio
+number
+messageId
+number?
+messageId
+number
+
+
+
+
+
+
+
+
+base64
+string?
+
+
+
+
+
+
+
+
+url
+string
+
+
+
+
+
+
+
+
+deletedAt
+string?
+
+
+
+
+
+
+The UploadStatus dict will contain a File object, which is the initial file object that gets uploaded into the application, either via the file input of via drag and drop. For every File that is added to the application, there is a dictionary key and value pair.
+The following function uses values in File to generate a unique string key.
+export function generateFileId(file: File): string {
+  return `${ file.name }-${ file.lastModified }-${ file.size }-${ file.type }`;
+}
+
+
+Upon initially adding files to the application, the function updateFiles and updateMessageFiles will communicate with the file upload APIs to upload files whilst returning upload progress and upload results back to the application. The updateFiles function targets the Core API, and is mainly used for uploading image files for a post, whilst the updateMessageFiles function targets the Messenger API, and is mainly used for uploading files (of various types) to be attached to a message.
+
+updateFiles
+Takes in a FileList, and begins uploading the file by adding each file in the FileList into the UploadStatusDict via the startUpload function, before uploading each file into the server via the uploadFile API request. The upload progress is monitored by the uploadConfig function sent along in the API request, which will update the progress of each uploading file.
+If the file is successfully uploaded, it will run the onSuccessfulUpload function to inform the UploadStatusDict the upload completion of that file, and provide the return object of type Picture to that UploadStatus, in the picture param.
+If the file failed to upload, it will run the onFailedUpload function to inform the UploadStatusDict or a failed upload, along with any error message if available.
+Display Usage
+The updateFiles function is called to upload attachments for a new post, or to edit a post, and the uploading UI is displayed via the FilesPreview component. On edit a post, the files already attached are displayed via the ExistingFilesPreview component. The separation is because FilesPreview expects a UploadStatusDict generated locally, whilst ExsitingFilesPreview targets an array of Picture returned from the API.
+
+updateMessageFiles
+Takes in a FileList, and also begins by adding each entry into the UploadStatusDict via the startUpload function, before uploading each file into the messenger server via the uploadMessageFile API request. Progress is also monitored via the uploadConfig function.
+When the file is successfully uploaded, it will also run the onSuccessfulUpload function, but rather than a type Picture return object, it is of type UploadMessageFile, as the Messenger API is independent of the Core API, and the Messenger file API can also handle file types beyond images. All the accepted MIME types can be found in the custom MIMEType dictionary, which will take a mime type, and match it to a ReturnFileType enum value.
+If the file failed to upload, the procedure is identical to updateFiles.
+Display Usage
+The updateMessageFiles is called to upload attachments for a new message, or to edit a message, and the uploading UI is displayed via the MessageFilesPreview component. On edit a message, the files already attached are displayed via the ExistingMessageFilesPreview component. The separation is because MessageFilesPreview expects a UploadStatusDict generated locally, whilst ExistingMessageFilesPreview targets an array of UploadMessageFile returned from the API.
+
+Upload functions for each file in UploadStatusDict
+startUpload
+Adds a new entry into the UploadStatusDict, with a key generated by the generatedFileId function. Adds the File object to the dictionary, sets the progress to 0 and status to Uploading.
+onSuccessfulUpload
+Updates the UploadStatusDict entry via matching the key, adds the return Picture or UploadMessageFile object into the entry, and sets the progress to 100 and status to Complete.
+onFailedUpload
+Updates the UploadStatusDict entry via matching the key, adds the optional return error string into the entry, and sets the progress to 100 and status to Failed.
+
+Int enum ReturnFileType
+Image, PDF, Document, Powerpoint, Excel, Audio, Video, Other
+
+
+getFileType(mimeType: string): ReturnFileType
+A function that takes in the mimeType string and determines the ReturnFileType based on the MIMETypes dictionary.
+MIMETypes: Dict<ReturnFileType>
+A dictionary that takes the key as a string, where the key is associated to a mimeType, and assigns the value to a ReturnFileType.
+
+Final Form Display: When Attached to a Message or a Post
+FileDisplay
+A component to display all the files attached to a message, displayed on select a message thread and viewing previous messages, via the MessageDisplay component. This includes both messages with attachments sent by the user, or messages with attachments received from other senders.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/file-return-files--message-files-sample
+
+ImageDisplay
+A component to display all the image files attached to a message, also on MessageDisplay. This component will be used rather than FileDisplay, if all attachments in a message are images. This component will display the image uncropped if there is only one image, and as a 2 by 2 square grid if there are multiple. The component will stop displaying images beyond 4, but instead show a + sign with remaining quantity to indicate the quantity of remaining photos in a post.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/file-return-files--message-image-files-sample
+
+PostImageDisplay
+A component to display all the image files attached to a post via the PostBox. This component is used for both posts created by the user, and posts created by other users in the 115.1 application. The component will display the image uncropped if there is only one image, and as a 2 by 2 square grid if there are multiple. The component will stop displaying images beyond 4, but instead show a + sign with remaining quantity to indicate the quantity of remaining photos in a post.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/file-return-files--post-image-files-sample Notification Components
+
+Notification Implementation
+Uses the NotificationContext to manage notifications, and determine the reveal/close of NotificationPanel, a component for appending the list of notifications.
+
+Notification (Custom Object)
+Notification
+NotificationData
+NotificationSender
+Param
+Type
+Param
+Type
+Param
+Type
+created_at
+Date
+user
+NotificationSender
+id
+string
+data
+NotificationData
+user_id
+string
+profile_picture
+Picture?
+id
+NotificationType
+GroupInvitationRequested  only
+full_name
+string
+is_read
+boolean
+group_id
+string?
+
+
+
+
+
+
+
+
+group_invitation_id
+string?
+
+
+
+
+String Enum NotificationType
+group_name
+string?
+
+
+
+
+Name
+Value
+group_privacy
+ChannelPrivacy?
+
+
+
+
+GroupInvitationRequested
+GroupInvitationRequested
+status
+NotificationStatus?
+
+
+
+
+
+
+PostLiked
+PostLiked
+PostLiked, PostPrayed, PostPraised, PostCommented & PostCommentLiked only
+
+
+
+
+PostPrayed
+PostPrayed
+post_id
+string?
+
+
+
+
+PostPraised
+PostPraised
+PostComment & PostCommentLiked only
+
+
+
+
+PostCommented
+PostCommented
+comment_id
+string?
+
+
+
+
+PostCommentLiked
+PostCommentLiked
+
+
+
+
+
+
+
+
+InviteAccepted
+InviteAccepted
+
+
+
+
+
+
+
+
+
+
+NotificationPanel
+Consumes the notificationList returned from the NotificationContext. If there are notifications, they are displayed by the NotificationDisplay component, else a NotificationEmptyState will append, to indicate the lack of notification. A Back button is also located to close the NotificationPanel. NotificationPanel works in complement with RightPanelComponent, such that NotificationPanel reveals on top of RightPanelComponent, and close to be tucked away towards the right of RightPanelComponent.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/notification-panel--with-notification
+
+NotificationDisplay
+A component that takes in all notifications, and displays individual notifications via the NotificationDisplayCase component.
+
+NotificationDisplayCase
+An all NotificationType compatible component, that uses the enum to determine which child component to append, as different child contains different messages, on click actions and properties. On click any of the children will mark the notification as read, and most are designed to direct to a specific path. Here are the available child components:
+Component Name
+NotificationType case
+Purpose
+On Click Action
+GroupInvitationRequested
+For when another member invited the user to join a channel.
+Direct to ChannelsPage with the channel appended on ChannelDisplay.
+PostReacted
+PostLiked, PostPrayed and PostPraised
+For when another member has liked, prayed or praised a post created by the user
+Direct to SinglePostPage with the post appended.
+PostCommented
+For when another member has made a comment on a post created by the user
+Direct to SinglePostPage with the post appended, and comment highlighted
+PostCommentLiked
+For when another member has liked a comment created by the user, on any post
+Direct to SinglePostPage with the post appended, and comment highlighted
+InviteAccepted
+For when another member has accepted the invitation to join the application
+N/A
+
+
+NotificationButton
+A wrapper component for all child components in NotificationDisplayCase, for housing components and functions applicable to all notification cases, including displaying the member profile image via Base64, and button in a shade of blue for unread, and white for read.
+
+Toast Components
+
+Toast Implementation
+Uses the ToastContext to control the add and remove of toasts, whilst uses the NavBorders to append the toasts, via the ToastContainer.
+
+Toast (Custom Object)
+Param
+Type
+ id
+number
+title
+string
+description
+string
+type
+ToastType
+
+String enum ToastType
+Enum
+Value
+Success
+success
+Error
+error
+Notification
+notification
+
+
+
+onClick
+() => void?
+added
+boolean?
+
+
+ToastContainer
+A container that stores all toast from the toastList returned in the ToastContext, and displays individual toast via the ToastBox. ToastContainer will automatically remove the earliest toast from the list every 3 seconds if there are any. ToastContainer also contains callback handlers for individual toast. For removeToast, it will remove the toast from the ToastContext entirely via the removeToastFromList function call, and for updateMouseDown, it will set that toast as the next toast to remove, before going back to the top of list 3 seconds later.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/toast--toast-activator
+
+ToastBox
+An interactive component designed to display a Toast object. The ToastBox uses the Toast object to display the title and description, and determines the background colour based on the ToastType enum. It contains an optional on click callback, and can be dismissed by clicking the close button on top right, or by swiping left or right to dismiss. The useHandleSuccess and useHandleError custom hooks will notify a successful or unsuccessful action by providing a new Toast alert via a ToastBox. The ToastBox is designed to be displayed as a list in the ToastContainer component called in NavBorders.
+ToastBox also contains drag listeners that will determine drag actions. If the drag is over half the length of the component, it will hit the removeToast callback, or else it will hit the updateMouseDown callback, both of which will return information for the ToastContainer.
+
+useHandleSuccess & useHandleError
+An extension to useCallback that triggers a ToastBox when called by a React component, designed to take in custom message and optional custom title, with optional on click functionality.
+Home Page & Components
+
+HomePage
+The entry point for Tab.Home. HomePage calls the useHomeServices to retrieve the initial posts in the application via the getPosts API, and continues to retrieve more posts via the API’s pagination method on scroll. The purpose of the home page is to act as the landing page on login, viewing all posts (regardless of associated Channel), and crafting new posts. It will also provide any modals when called within the Home page by providing the local ModalContext via the useModalContextState hook.
+useHomeServices
+Retrieves posts initially by calling the getPosts API. This will return the latest 20 posts. Then it will memorise the query string returned from the API, which will later be used for the getMorePosts API to retrieve the next 20. The call to get more posts is determined by the presence of Activites.HomePageMorePosts in the ActivityContext, and whether the next query string is defined. Activities.HomePageMorePosts is defined in HomeBox when the scroll listener detects that it has reached the bottom of the posts scroll list.
+
+HomeComponent
+The component is split into three horizontal sections by the DashboardInner, HomeLeftComponent, which contains the NewPostTypeSelection, for creating a new post; HomeBox to view and interact with posts; and RightPanelComponent, which in this situation is just an empty container.
+
+HomeBox
+The centre and main component of HomeComponent, which contains a scrollable container to list out all the available posts vertically, returned from HomePage, with each post displayed via the HomePagePost component. The HomeBox is also in charge of filtering posts via the PostFilter and detecting any scroll behaviour and determining the actions, including showing more paginated posts, and sending analytics. It will also append the appropriate loading spinners as determined by the ActivityContext.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/home-recent--standard
+
+HomePagePost - Extension of PostBox
+As HomeBox contains filter functions, PostBox is called on multiple occasions. The HomePagePost component is mainly to deduplicate code by defining the identical props once.
+
+PostFilter
+A component to filter posts based on their PostType.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/home-post-filter--standard
+
+Channels Page & Components
+
+Components with the Channels directory consume the ChannelContext to retrieve the data that gets appended to the page, and actions within a user journey.
+
+ChannelsPage
+The entry point for Tab.Channels, and Tab.Channels with id. ChannelsPage calls the useChannelsInitialServices to determine if a channel is displayed on screen based on the id in the url; calls the useChannelsServices to retrieve all the channels that the user is an admin or a member of; and useChannelPosts to retrieve and update all the posts within a selected channel. It will also provide any modals when called within the Channels page by providing the local ModalContext via the useModalContextState hook.
+useChannelsInitialServices
+Determines whether the id passed from the url corresponds to the id of an existing channel.If the channel is not already defined (like by tapping a button in the ChannelSelectionColumn), then it will attempt to retrieve the channel information by hitting the getChannel API call. If it is successful, it will update the ChannelContext and append the channel on screen, if not it will redirect the user back to a state in ChannelsComponent where the active channel is not defined. In this case, appending the DiscoverDisplay.
+useChannelsServices
+Retrieve all the channels that the user is an admin or a member of, and update the ChannelContext.
+useChannelPosts
+Retrieves all the posts within a channel, called whenever a channel is defined. There is an API call for getChannelLatestPosts but the result is no longer used.
+
+ChannelsComponent
+ChannelsComponent contains and controls all the interactions within channels in the application, and stores all the information throughout a user journey via the ChannelContext.
+The component is split into three horizontal sections by the DashboardInner, ChannelLeftComponent, which contains the NewPostTypeSelection, for creating a new post; ChannelsBox/ChannelDisplay, contains interactions within a selected channel, and search and discover channels functionality; and RightPanelComponent, which contains the ChannelRightPanel, for viewing channel invitations and selecting channels a user manages or are a member.
+
+ChannelLeftComponent
+A component that takes in a child, and contains a button to create a new channel. The button will only show up when the UserContext contains the userPermission.CreateChannels in the user object.
+
+ChannelDisplay
+A component that contains all components and interactions within a selected channel, used when a channel is defined. It contains the StickyChannelInfoIndicator, which reveals on scroll up, when viewing the list of posts; ChannelEditForm, to display and edit the content of a channel; and for each post correlated to the channel, a PostBox.
+useSelectedChannelServices
+Calls the useSelectedChannelServices to update information regarding the current ActiveChannel to the ChannelContext. This is called whenever ChannelDisplay contains a new channel.
+
+ChannelEditForm
+A component to display the basic information of a channel, including name, location, description, admins and members. For admins, it includes the ability to edit the channel details. ChannelInfo component is used for displaying channel information, whilst ChannelFormContent is used to edit channel information. Both components live within ChannelEditForm.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/channels-channel-edit-form--standard
+
+ChannelsBox
+A component called when the selected channel (activeChannel) in the ChannelContext is not defined. Contains the DiscoverDisplay, for discovering new channels, and CreateNewChannelDisplay, for creating a new channel.
+
+DiscoverDisplay
+A component for the user to discover and search channels within the application. When there is no input in the input bar, the discover channels will show up as a horizontal list, else when searching with the input it will show up in a vertical list.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/channels-discover-page--standard
+
+CreateNewChannelDisplay
+A component for creating a new channel. Form data and actions are provided by the NewChannelForm.
+
+NewChannelForm
+A form that looks similar to the ChannelEditForm, when edit mode is enabled, for the purpose of creating a new channel. To create a new channel, a name, bio must be provided, on top of the channel privacy and visibility. The requirements are identical to ones found in ChannelEditForm.
+
+ChannelsRightPanel
+A component to display all the channels that the user is an admin or a member from the ChannelContext, and displays any channel invitation that the user may have. Note that the channels are already provided in the NavBorders component.
+
+InviteConnectionsModal
+A modal to invite users in the application to join a channel. This modal is designed to be triggered when a user is already an admin or a member of the channel. When an invitation is sent, a ToastBox will pop to indicate that the invitation is successfully sent.
+
+ChannelMembersModal
+A modal to view the current admins and members of a channel. For members and non-members, this modal is limited to viewing members. For admins, this modal enables them to manage admins and members, including adding a member as admin, removing a member from admin, and removing a member from the channel entirely.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/channels-channel-members-modal--standard
+
+
+
+
+
+
+Profile Page & Components
+
+ProfilePage
+The entry point for Tab.Profile. ProfilePage calls the useProfileServices to retrieve profile information for the selected profile, based on the url. If the url contains an id, it will attempt to retrieve information based on the id. If the id is not present, it will retrieve personal profile information. The purpose of the profile page is to view and interact with information for all profiles, and to update profile details for personal profiles. It will also update the UserContext based on updates made in the personal profile, and provide any modals called within the Profile page by providing the local ModalContext via the useModalContextState hook.
+useProfileServices
+A hook that returns profile details based on the provided id. This includes the profile information of type Profile, the status (between loading, personal, others and notFound enum), the profile stats, which returns the quantity of posts made for each PostType, the posts created by the user, and the channels that the profile is an admin or a member of.
+
+Profile Related Type Definitions
+useProfileServices return Type
+ProfileState
+ProfileStats
+Param
+Type
+Param
+Type
+Param
+Type
+posts
+Post[]
+status
+enum ProfileStatus
+
+personal, other, notFound, loading
+baptism_count
+number
+profileChannels
+Channel[]
+profile
+FullProfile?
+obedience_count
+number
+profileState
+ProfileState
+profileStats
+ProfileStats?
+post_count
+number
+
+
+
+
+
+
+
+
+praise_count
+number
+
+
+
+
+
+
+
+
+prayer_count
+number
+
+
+
+
+
+
+
+
+salvation_count
+number
+
+
+Profile
+FullProfile extends Profile
+SearchResultProfile extends Profile
+Param
+Type
+Param
+Type
+Param
+Type
+id
+string
+background_image
+Picture?
+is_member
+boolean
+first_name
+string
+bio
+string
+is_sent
+boolean
+last_name
+string
+location
+Location?
+
+
+
+
+full_name
+string
+country_id
+string?
+
+
+
+
+country
+string?
+privacy
+string?
+
+
+
+
+profile_picture
+Picture?
+invitor_name
+string?
+
+
+
+
+
+
+ProfileComponent
+The component is split into three horizontal sections by the DashboardInner, however only the centre section is occupied with content provided by the ProfileDisplay component.
+
+ProfileDisplay
+Split into two sections vertically, first is ProfileEditForm which displays profile information, and also has edit profile functionalities embedded, and acts similarly to ChannelEditForm. Second is a list of posts created by the user, with each post displayed via a PostBox. There is also a pagination method in the component so that only four posts show up once. Pagination is done with the usePage hook, and controlled by the PageIndicatorContainer component.
+Personal Profile Storybook Link
+https://storybook-dev.115one.app/?path=/story/profile-profile-display--personal-profile
+Other’s Profile Storybook Link
+https://storybook-dev.115one.app/?path=/story/profile-profile-display--others-profile
+
+ProfileEditForm
+A component to display the basic information of a profile, including name, location, and bio. For a personal profile, it includes the ability to edit the profile details. ProfileInfo component is used for displaying profile information, whilst ProfileFormContent is used to edit profile information. Both components live within ProfileEditForm.
+
+PageIndicatorContainer
+A container which includes the left and right buttons to go forward and backward, and the PageIndicator to indicate the page number. PageIndicator will also shift between left, midline and right to indicate where it is the first, last page or a page in between.
+
+
+
+Chat Page & Components - For Overall Chat Functionality
+
+Components within the Chat directory consume the MessageThreadContext to retrieve the data that gets appended to the page, and manage actions within a user journey.
+
+ChatPage
+The entry point for Tab.Chats, Tab.Chats with id,  Routes.NewChat() and Route.Failed(). Chatpage will determine the actions, components and interactions within the app based on the useChatViewActions hook. It will also detect typing interactions and update the typing indicator by calling the useTypingFactory hook. It will also provide any modals when called within the Chat page by providing the local ModalContext via the useModalContextState hook.
+useChatViewActions
+Updates the ChatView and creates new threads when new users are added into the NewChatBox. ChatView is an enum, with SelectionColumn, ChatBox and Failed as the options, and is mainly used for responsive viewing in mobile view.
+useTypingFactory
+Establishes a HubConnection and listens to the “IsTyping” connection endpoint, which will add any new typingMembers to a thread in the MessageThreadContext. It will also set a timeout to remove it a second later.
+useModalContextState
+A state where all the functions and the modal that the functional callback returns are defined. References can be found in the Chat Page ModalContext.
+
+ChatComponent
+ChatComponent contains and controls all the interactions within messaging in the application, and stores all the information throughout a user journey via the MessageThreadContext.
+The component is split into three horizontal sections by the DashboardInner, ChatSelectionColumn, to select an existing message thread and begin a new thread; ChatBox/NewChatBox, contains all the messages and interactions within a thread, and the functionalities to create new threads; and ChatRightPanel, to view additional information within a selected thread.
+
+ChatSelectionColumn
+A component that lists out all the available message threads, with a callback function to begin a new message thread. The component expects an array of MessageThread to be passed in.
+In the application, the messageThreads are retrieved from the MessageThreadContext consumer called in ChatComponent. For each thread in the list, it will append a MessageHead component to display basic thread information.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/chat-selection-column--standard
+
+MessageHead
+A button to display basic information of a MessageThread, including thread name or members name, avatar, and latest message text content and timestamp. It will also highlight the button as blue if that is the selected thread currently appended to the ChatBox, and will destroy the message notification via the destroyMessageNotification function in the MessageNotificationContext, if the thread contains any new incoming messages.
+
+MessageThread
+Param
+Type
+id
+string
+name
+string?
+image_url
+string?
+members
+string[]
+messages
+Message[]
+latest_message
+Message?
+typing_members
+Dict<NodeJS.Timeout>
+
+
+ChatBox
+The ChatBox component contains all interactions within an existing thread. Once a thread is selected from the ChatSelectionColumn, the associated information is appended to the ChatBox. ChatBox is mainly split between showing existing messages, and interactions to send new messages or edit messages, and starting conference calls.
+useChatBoxServices
+A hook to be called in ChatBox, that will retrieve all messages within a thread, mark the last message as read, and retrieve the profile information of all members of the thread. Both message retrieve and profile information retrieve are designed to only be called on initial load of the ChatBox component, and when the message thread id has changed (when the user selects a different thread via the ChatSelectionColumn).
+
+NewChatBox
+The NewChatBox component contains all interactions within a newly created thread. The component is triggered by clicking the New Chat button in the ChatSelectionColumn. NewChatBox allows the user to select any member in the application, and then add them as members to this new thread. Once at least one member is selected, the ChatInputContainer will appear, allowing the user to send a new message. If all the selected users are already in an existing thread, their previous messages will appear on this thread. Once a new message is sent, the ChatBox takes over from the NewChatBox.
+The NewChatBox is mainly split between showing existing messages if available and interactions to send new messages or edit messages. Viewing thread information with that ChatRightPanel, and initiating a new call are not available in the NewChatBox, as the main purpose of this component is to begin a new chat.
+useUseChat
+A hook to be called in NewChatBox, that will create a new thread and retrieve any messages that already exist in the thread. It will also mark the last message as read if available. This hook is designed to be called on changing the members selected to create a new thread in NewChatBox.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/chat-new-chat-box--template
+
+Displaying and interacting with existing messages (ChatBox & NewChatBox)
+Existing messages are displayed inside the div.div-messages container. The container displays items in reverse order so that items stack from bottom to top, like how a messenger behaves. Therefore, when appending the list of messages, via the MessageDisplay component per message, it is also done in reverse, so that the double reverse allows the messages to show up in the right order, from top to bottom, but the gravity of all contents stay at the bottom.
+MessageDisplay interactions - Interacting with a message on screen
+The MessageDisplay component allows the following interactions with each message, including activate edit or delete message, view read status, and view message disappearing timer. More details on the component can be found here.
+Other display components
+DateSeparator is also appended in between messages, if the date between two messages is different. The container also displays a startThreadMessage, and TypingIndication.
+
+Interactions within ChatBox
+Sending a new message
+Uses the ChatInputContainer to send a new message, along with the sendMessage function to hit the sendMessage API call and handle the update.
+Editing an existing message
+Uses the ChatInputContainer to edit an existing message, along with the editMessage function to hit the editMessage API call and handle the update.
+Drag and Drop attachments
+The DragAndDrop component is a parent component that wraps other components in ChatBox, that enables drag and dropping attachments functionality.
+
+ChatBoxTopBar
+A bar located at the top of ChatBox to show the list of users in the thread, avatar, button to open the ChatRightPanel (by click on the dropdown menu or the user names), with functionality to start a new voice or video call.
+
+ChatRightPanel
+A panel revealed by the ChatBoxTopBar to show information about the thread, including viewing member profiles, and the description for the disappearing messages functionality. It also includes the functionality to start a new voice or video call.
+
+ChatInputContainer
+A component that includes a range of functionalities to craft a new message or edit an existing message. For a new message, it includes an empty text input, and MessageFilesPreview to show the upload progress of files. For editing an existing message, it includes a text input with existing message content, and shows the existing attachments with the ExistingMessageFilesPreview component. New attachments will continue to be shown with the MessageFilesPreview component.
+The component detects whether it is crafting a new message or editing existing message based on whether UserMessage.originalMessage is defined.
+Both states include a Send button to send the message, but the user can also press Enter to send the message. When it is in the edit state, a Cancel button is available to cancel the edit request, and it will reset the container to its original state.
+On sending a new message, it will hit the sendMessage function. On editing an existing message, it will hit the editMessage function.
+sendMessage
+The sendMessage function executes the following:
+1. Encrypt the message
+2. Construct a mock message and add it to the localStorage
+3. Reset the ChatInputContainer state
+4. Hit the sendMessage API
+5. If the API call is successful, send the analytics event via the sendAnalytics API call, and remove the message from the localStorage, before decrypting the message and hitting the callback function
+6. If the API call is unsuccessful, update the message in the localStorage to indicate the state of the message, and hit the callback function. (Note the message will still appear on the ChatBox, but with a retry button to retry, and a cancel button to remove it entirely)
+editMessage
+The editMessage function executes the following:
+1. Construct a mock message and add it to the localStorage
+2. Reset the ChatInputContainer state
+3. Hit the editMessage API
+4. If the API call is successful, remove the message from the localStorage, before hitting the callback function
+5. If the API call is unsuccessful, update the message in the localStorage to indicate the state of the message, and hit the callback function. (Note the message will still appear on the ChatBox, but with a retry button to retry, and a cancel button to reset it back to the original state)
+
+TypingIndication
+A component to indicate whether there are any users currently typing. Retrieved based on a string array of typingMembers, generated by the keys in each of the MessageThread.typingMembers dictionary item. The component uses the typingIndicationMessage to generate the typing indicator string.
+typingIndicationMessage
+A function that returns a string based on the quantity of the typingMembers, designed with single and multiple quantity implementations.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/chat-typing-indication--standard
+
+Message Components - For each Message
+
+Message (ObjectType & MessageResponse return Object)
+Message
+Param
+Type
+id
+number
+editedAt
+number?
+deletedAt
+number?
+textContent
+string
+date
+number
+sender
+string
+auxiliaryInfo
+string
+messageThreadId
+string
+attachments
+MessageAttachment[]
+statuses
+MessageStatusDict
+countdown
+Countdown
+
+Param
+Type
+start
+number
+end
+number
+
+
+
+action
+Action?
+
+Param
+Type
+type
+MessageActionType
+
+
+
+localStatus (used for localStorage only)
+String enum SendMessageLocalStatus?
+
+Enum Name
+Value
+SendingNewMessage
+SendingNewMessage
+Sending
+Sending
+SuccessNewMessage
+SuccessNewMessage
+SuccessEditMessage
+SuccessEditMessage
+FailNewMessage
+FailNewMessage
+FailEditMessage
+FailEditMessage
+
+
+
+original (used for localStorage only)
+Optional object
+
+Enum Name
+Value
+id
+number
+textContent
+string
+attachments
+MessageAttachment[]
+
+
+
+
+
+MessageResponse, NewMessageResponse, MessagesResponse & MessageThreadResponse
+MessageResponse & NewMessageResponse
+MessagesResponse
+MessageThreadResponse
+Param
+Type
+Param
+Type
+Param
+Type
+message
+Message
+messages
+Message[]
+messageThread
+MessageThread
+
+
+
+
+earliestMessageTime
+number
+
+
+
+
+
+
+MessageDisplay
+A component to display individual messages of type Message. The component displays a range of content along with a range of callbacks. All MessageDisplay will display the sender name and avatar, the time it was sent, the disappearing timestamp and counter, the message content, along with viewing the message read status. The component also provides callbacks to edit and delete messages, if the user is the sender.
+Text Only Message Storybook Link
+https://storybook-dev.115one.app/?path=/story/chat-message-display--text-only-message
+The component will also show the attachments attached to the message. If all the attachments are images, it will display the images via the ImageDisplay component, where on click they can view the image. Or else, it will display the attachments via the FileDisplay component, where on click they can download the image.
+Message With Images Storybook Link
+https://storybook-dev.115one.app/?path=/story/chat-message-display--message-with-images
+Message With Files Storybook Link
+https://storybook-dev.115one.app/?path=/story/chat-message-display--message-with-files
+The component will also show an action attached to the message if available. If the message.action attribute is defined, it returns a MessageActionType enum value, which will append the MessageAction component, and uses the enum value to determine which component to append.
+Message With Action Storybook Link
+https://storybook-dev.115one.app/?path=/story/chat-message-display--message-with-action
+
+MessageAction
+A component that will append components based on the MessageActionType enum. Currently only MessageActionType.Call is available, which appears after a member of a thread begins a call. The message is returned from the startCall API call, used in the useStartJistiCallback.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/chat-message-action--standard
+
+DisappearingMessageTimer
+A component used in MessageDisplay to indicate the disappearing time. The timer follows a traffic light pattern to indicate the remaining appearance time, and is as follows:
+Pie Colour
+Meaning
+Detection
+Red
+Less than or equal to 1 minute
+Gets new disappearing time every second
+Yellow
+Less than or equal to 1 hour
+Gets new disappearing time every minute
+Green
+Less than or equal to 1 day
+Gets new disappearing time every hour
+Grey
+Everything else
+Gets new disappearing time every day
+
+
+useDisappearingTime
+A custom hook that is used to determine the gap between current time and when to provide the next disappearing timestamp, to the second, the minute, the hour, or the day. The hook returns a TimeDifferenceUtils object that includes the following:
+Param
+Type
+differenceInMs
+number
+difference
+number
+unit
+Int Enum TimeUnit
+
+Case
+Value
+second
+1000
+minute
+60000
+hour
+3600000
+day
+86400000
+
+
+The enum value is based on the amount of a second, minute, hour and day in millisecond format.
+
+
+The DisppearingMessageTimer uses the useDisappearingTime hook in the following example. Say if a message is to disappear in 1 day and 7 minutes. It will first tell the timer to retrieve an updated timestamp in 7 minutes, and then once the 7 minutes has elapsed, it will then know the disappearing time to be exactly 1 day, so it will then retrieve an updated disappearing time every hour. The Pie colour will also turn from Grey to Green to indicate the change.
+PieIndicator
+Takes in the TimeDifferenceUtils to return an image of a coloured pie. Colour as indicated about and the fullness of the pie is based on the amount of time left in an hour, a day or a week. Note that difference in seconds, for the last minute is drawn on a canvas as opposed to returning an image. The pie images can be found in the src/Assets/Images/timer directory.
+Canvas
+Canvas is used in the DisappearingMessageTimer for when the message is in its last minute of disappearing time. The Canvas will draw a red pie based on the remaining seconds in a minute.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/chat-disappearing-message--standard
+
+MessageStatusIndicator
+The MessageStatusIndicator component indicates the read status of a message. The component is toggled when hovering over a MessageDisplay, and then clicking the info icon that appears on hover. The component takes in a MessageStatusDict, which is a dictionary, with key as MessageStatus (enum for read, received and sent), with value as a dictionary, with key as a string, in this case to indicate the member id, and value as number, in this case to indicate the timestamp.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/chat-message-status-indicator--standard
+
+
+ImageModal
+A Modal to append image attachments on a Message, designed to be triggered on click of an image in a MessageDisplay component. The Modal will cycle back and forth between messages to append more attachments from other messages in the thread. Although mainly for images, the modal is designed to show file preview, if the next attachment is not an image.
+
+
+
+Other Pages
+
+SinglePostPage
+The entry point for Tab.Post. SinglePostPage calls the useSelectedPostServices to retrieve information of a particular Post, based on the provided id. It also takes in an optional selectedCommentId, used for clicking a post comment related notification, to highlight the comment in the PostBox, configurable based on the configOverwrite.highlightSelectedComment param in the PostBox.
+The SinglePostPage is triggered by either clicking the timestamp in a PostBox, clicking a post related notification, or directly from the url when an id is provided. If an id is not provided, or the id does not match an existing post, it will display the NotFound component.
+
+CallPage
+The entry point for Tab.Call. CallPage houses the JitsiConference component, where a voice or video conference call is held, via the useJitsiServices hook. To begin a conference call, a CallConfig must be provided such that Jitsi has the necessary information to create or join a call, and this configuration is passed by clicking the call buttons found in components within Chat. If a CallConfig is not provided, a WarningBox component will appear, prompting the user to navigate back to the ChatPage.
+
+
+Jitsi - Voice & Video Implementation
+
+This application uses the Jitsi Meet application to integrate voice and video call services into the application. Jitsi is a collection of Open source projects that provide secure video conferencing, and the Jitsi APIs are easily integrated into the application.
+Please refer here for the full 115.1 Jitsi Documentation. This documentation will only cover how our self hosted Jitsi services are appended onto the web application.
+
+Jitsi Implementation
+Video conferencing is accessible via the CallPage component in Pages/Call/index.tsx, where the JitsiConference is responsible for showing and handling the call, via calling the custom useJitsiServices hook.
+
+useJitsiServices
+The custom hook is responsible for initialising the jitsi call. To initialise a call, it will first check whether the JitsiMeetExternalAPI is available. If not, it will call the loadJitsiScript function to load the script.
+Then, it will join the call by sending the roomName into the external API. Matching the roomName is how participants are connected to the same call. In this application, the messageThreadId, available as a unique id to each message thread, is used as the roomName. The API will also retrieve the user profile name and open/close camera preference, before joining the call.
+
+useStartJistiCallback
+The custom hook is an extension of the useCallback hook, and is used when a user creates a new call in a message thread. Note that this is only for the first people to create the call, and not used for other users in the thread joining the call. The hook takes in the messageThreadId and User object to send it to the startCall API to initiate the call. This API will also send a message to the thread informing other members that a call has been initiated, and then can join the call by clicking the Join button available in the CallInteraction component attached to the message.
+The hook also takes in the CallConfig, where it will be used in the useJitsiServices hook to override the default configuration.
+
+Event Listeners
+videoConferenceLeft & readyToClose
+Jitsi contains a videoConferenceLeft listener that will trigger a callback when the user has left the conference, and a readyToClose listener that will trigger when the call has ended. Both listeners are set to navigate the user back to the message thread in the Chat page upon finishing the call.
+
+
+Utilities
+
+Dict - Dictionary
+A type definition for a custom dictionary, that takes a string as the key, and any custom type as the value.
+Declaration
+interface Dict<T> {
+  [key: string]: T;
+}
+Usage
+Dict<{ id: number, fileName: string }>
+Example
+const filesDict: Dict<{ id: number, fileName: string }> = {
+  "item-1": {
+    id: 1,
+    fileName: "item-1.png"
+  },
+  "item-2": {
+    id: 2,
+    fileName: "item-2.pdf"
+  },
+}
+
+
+EmunDictionary
+A Dictionary with Key as Number, String of Symbol in an Enum, and any custom type as the value
+Declaration
+export type EnumDictionary<T extends string | symbol | number, U> = {
+  [key in T]: U;
+};
+Usage
+export enum ToolTipCancelMessage {
+  close = "close",
+  cancel = "cancel",
+  exit = "exit",
+  dismiss = "dismiss",
+}
+
+Enum<Dictionary<ToolTipCancelMessage, string>
+Example
+const keys = {
+  CLOSE = "Close the component",
+  CANCEL = "Cancel the request",
+  EXIT = "Exit the page",
+  DISMISS = "Dismiss the response"
+}
+
+const toolTipCancelMessageDict: Enum<Dictionary<ToolTipCancelMessage, string> = {
+  [ToolTipCancelMessage.close]: keys.CLOSE,
+  [ToolTipCancelMessage.cancel]: keys.CANCEL,
+  [ToolTipCancelMessage.exit]: keys.EXIT,
+  [ToolTipCancelMessage.dismiss]: keys.DISMISS,
+}
+
+
+Tabs, Routes & StorageRoutes
+Tab - String enum
+Routes - String dictionary
+StorageRoutes - String dictionary
+An enum to list out the available urls
+A dictionary to specify the available chat related urls
+A dictionary to specify the available key value pairs for localStorage
+Enum
+Value
+Key
+Value
+Key
+Value
+Chats
+/chats
+NewChat
+/chats/new-chat
+User
+user
+Channels
+/channels
+Chat
+/chats/<messageThreadId>
+SecondaryUser
+secondary-user
+Profile
+/profile
+Failed
+/chats/something-went-wrong
+Messages
+messages-<messageThreadId>
+Home
+/home
+
+
+
+
+MessageThreadId
+message-thread-id
+Post
+/post
+
+
+
+
+
+
+
+
+Call
+/call
+
+
+
+
+
+
+
+
+
+
+Custom Hooks
+
+Custom Hooks are written to provide reusable functions in the 115.1 application, with reusable stateful logic that allows all states and effects to be isolated everytime a hook is called.
+The following are common custom hooks used throughout the application.
+
+useDownload
+For downloading a message attachment. An extension to useCallback that takes in the file id and file name to retrieve the Base64 Encoded file, before downloading via the JSFileDownloader.
+
+useDragAndDrop
+For detection of drag events in a component. An extension to useEffect that will continuously listen to drag events when called in a React component, and if the drag contains files it will return the files in a callback. This hook is commonly used in conjunction with the DragAndDrop component.
+
+useStateRef
+An extension to useCallback that contains a listen to process a state update the state of a process node has changed. This is often used for retrieving HTML component references, when the official useRef hook has not been reliable.
+
+useViewport
+An extension to useEffect that detects the viewport (width and height), when called in a React component. It is designed to return updated viewport values when the resize listener event is triggered.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/hooks-useviewport--standard
+
+useKeyPress
+An extension to useEffect that detects whether a specific keyboard key is pressed, and returns a Boolean value.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/hooks-usekeypress--standard
+
+useEscape
+An extension to useKeyPress specific for the Escape, that takes in a callback argument, mainly to reset input field values on click.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/hooks-usekeypress--standard
+
+useScrollListener
+An extension to useEffect and useCallback, and works with the scroll event listener to return data associated with the scroll behaviour of a specified component, including scroll direction, scroll position and whether scroll has reached top or bottom.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/hooks-usescrolllistener--standard
+
+usePage
+A custom pagination hook extended from useEffect, that determines the slice of content, and which nth to which nth item in list to display based on how many items are desired to be displayed at once.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/hooks-usepage--standard
+
+useLocationSearch
+An extension to useEffect for returning location results, when typing in an input field.
+
+useDisappearingTime
+A custom hook to determine when a message should retrieve its next countdown time. As it is expensive for JavaScript to retrieve an updated countdown repeatedly, and it is pointless to having the countdown be of a high frequency, when the countdown timer is just a PNG of a sliced pie, until the last hour, the useDisappearingTime is therefore introduced to determine the exact time the next interval should occur, based on the current time and the time a message should disappear.
+Storybook Link
+https://storybook-dev.115one.app/?path=/story/chat-disappearing-message--standard
+
+
+Translation
+
+Translation is implemented in the application by providing localised string via the useTranslation hook, provided by react-i18next. Based on i18next, an internationalisation framework written in and for JavaScript, the react-i18next framework provides optimal integration for React application.
+
+useTranslation
+The useTranslation hook is used throughout the application for when a localised string is needed for a component. To print a localised string, call the t function of type TFunction provided by the useTranslation hook, and provide the key of the translation template when calling the t function to retrieve the corresponding string.
+
+String template
+The template is constructed as a string dictionary, and each item in the dictionary consists of a string key, in large letters and snake case, and a string value. The values can be retrieved by providing the matching string key to the t function.
+
+Interpolated string
+To pass in arguments into the string, call the format operator after calling the t function to return the string with the passed arguments. The format operator is defined in src/strings.ts, and declared in App.tsx, which takes in a vararg of strings, and the interpolated string will retrieve a specified argument from the vararg based on the specified position. The following is an example:
+Template
+const keys = {
+  BREAKFAST_FOOD: 'I like {0} for breakfast. Pair that with a {1} makes my day.'
+}
+Usage
+const { t } = useTranslation;
+
+return t(keys.BREAKFAST_FOOD).format('bacon omelette', 'latte');
+Output
+I like bacon omelette for breakfast. Pair that with a latte makes my day.
+
+
+useTranslationMemo
+The useTranslationMemo is a custom hook developed upon useMemo, that makes a copy of the TFunction, when used within a useEffect. As function dependencies in the useEffect will cause the hook to rerender whenever there is a functional dependency, to remove this issue, a copy of the function is made and stored in the useTranslationMemo hook.
+
+
+Storybook - Interactive Components Explorer
+
+Storybook is implemented in the application to demonstrate existing UI components, and test them in isolation to the main application. Storybook benefits both developers and clients with frontend web app development and is used for the following purposes:
+For developers
+To test newly implemented components with mock data. Story components can determine whether the component returns expected interactions and results, and displays the expected look and feel based on a variation of data. Often designs that overlook long texts are discovered here.
+To present and demonstrate the functionalities of new components that may be difficult to put into words. In the documentation, Story components often act as a companion to put description into practice. Story is not just limited to visual components, but also custom hooks and contexts.
+For clients
+A way to present and interact with components in isolation to security restrictions that may come with application development.
+To see whether the programmed product matches the UI Design, and using it as a tool to draw on design thinking
+To present the design language, and look and feel of the application for purposes beyond the application development.
+
+Development Process
+Running it locally
+Storybook has already been added to the application via the Docs. Use the following command to run the Storybook locally.
+cd SPA
+yarn storybook
+
+
+The Storybook is currently pegged to the current version of node, 16.16.0. Following this doc to upgrade Storybook when upgrading the node version.
+
+Organisation
+Storybook recognises that it is a story component by reading the .stories. extension in a file. For example, a Button.tsx should have a complementary storybook file of Button.stories.tsx. In this application, story component files live in the same directory as their parent file.
+
+General Practices
+Storybook only functions, hooks and data live under the src/stories directory, and all story only scss modifications live in stories.scss
+
+Deployment
+Storybook is deployed to https://storybook-dev.115one.app/ when updated in the release-staging branch as specified in the Deployment configuration.
+
+Story Utilities
+Data
+Mock data are used throughout the story components to inject the necessary data into components. Most data are in JSON format, but some are in Typescript files for automation and hardcode reduction.
+File Name
+Data Return Type
+alternativeChannels.json
+Channel[]
+analyticsResponse.json
+AnalyticsResponse
+channel.json
+Channel
+channelMembers.ts
+createChannelMember(): ChannelMember
+generateChannelMembers(): ChannelMember[]
+channels.json
+Channel[]
+comment.json
+Comment
+disappearingMessages.json
+Message
+filesPreview.ts
+filesPreviewData: UploadStatusDict
+messageFilesPreviewData: UploadStatusDict
+existingMessageFilesPreviewData: UploadMessageFile[]
+locations.json
+Location[]
+messageAttachments.json
+MessageAttachment[]
+messageHead.json
+MessageThread
+messages.json
+Message[]
+messages.ts
+getRandomInt(): number
+getRandomNegativeInt(): number
+getRandomFutureTime(): number
+getRandomPreviousTime(): number
+
+textOnlyMessage(): Message
+messageWithImages(): Message
+messageWithFiles(): Message
+messageWithAction(): Message
+
+createMockSender(): Profile
+createMockImageAttachments: MessageAttachment[]
+createMockAttachments: MessageAttachment[]
+createMockImgAttachment: MessageAttachment
+createMockAttachment: MessageAttachment
+messageThreadImages.json
+{ id: string, url: string)[]
+messageThreads.json
+MessageThread
+notifications.json
+Notification[]
+othersProfile.json
+Profile
+personalProfile.json
+posts.json
+Post[]
+profiles.json
+FullProfile[]
+profileSearchResults.json
+Profile[]
+profileStats.json
+ProfileStats
+user.ts
+fakeUser(): User
+
+
+Functions
+Mock functions that return items or Promises are created to generate mock API responses. Most mock responses are programmed in each story, but some mock responses and functions, mostly image and attachment related, live in src/stories/index.tsx designed to be used across the story components.
+Function
+Return Type
+Purpose
+getRandomStoryImage()
+string
+Returns a valid image url from the Lorem Ipsum for images, to display images onto components
+getStoryImage(id: number)
+string
+mockGetRandomBase64()
+Promise<string>
+Provide a mock function for the getBase64 API call
+mockGetBase64(base64Path: string)
+Promise<string>
+mockGetBase64AndGetImagePath(base64Path?: string)
+Base64ApiService
+Provide a mock function for the getBase64 and getImagePath API calls
+mockGetBase64AndGetMessageImage(base64Path?: string)
+MessageBase64ApiService
+Provide a mock function for the getBase64 and getMessageImage API calls
+convertQuantityToPictures(quantity: number)
+Picture[]
+Add however many Picture to array based on the passed quantity
+convertQuantityToAttachments(quantity: number)
+MessageAttachment[]
+Add however many MessageAttachment to array based on the passed quantity
+createMockComment(body: string)
+Comment
+Generate a mock Comment with the passed body content
+
+
+
+Cypress - End to End Tests
+
+The purpose of implementing Cypress is to automate testing such that we can test frontend functionalities visually without the hassle of going through them manually. This is beneficial for maintaining a rigorous criteria for user interaction, and to ensure that functionalities within the application continue to work as the development process continues.
+Cypress is chosen for its ability to visualise the end to end tests in real time, such that both developers and clients can see the automated process, and also its relatively seamless integration into the React application.
+
+Development Process
+Running it locally
+Cypress is already added to the application via the Docs. Use the following command to run the Storybook locally.
+cd SPA
+yarn cypress open
+
+
+This will open a Cypress application window with several tests already available, that focuses on a range of functionalities within the application. Electron is the preferred browser of choice for this application. To run a test, click on any of the Integration Test list in the window, or to run all tests, click on the “Run X integration specs” button.
+Cypress does not support Typescript out of the box, but contains official type declarations for TypeScript conversion, which has been performed for this application. This is mainly beneficial for writing tests and custom Cypress commands in Typescript.
+
+Organisation
+All Cypress related items live in the SPA/cypress directory, and are organised by the predefined folders. All tests live in the integration directory, and all the custom Cypress commands live in the support directory.
+
+General Practices
+All integration tests and custom Cypress commands should be written in TypeScript. Functions that are used in a single test can be extracted as regular TypeScript functions, but functions used across tests should be declared as custom commands. This includes login, goOnline and assertOnline. Refer to the Custom Cypress Commands section for more.
+There are multiple methods of targeting components within Cypress, including using the id, className, or other html attributes, or by matching text content. Using class names is highly discouraged for their repeated frequency, and same for matching text content, as the application is designed with multi-language support. Using id is fine, but the best practice is to target components by declaring an extra data-cy attribute to the HTMLs. This will isolate the cypress attributes away from other attributes used in the application, avoiding confusion that comes with changing class names and ids throughout the development process.
+
+Integration Tests
+Integration tests for this application are in general divided based on the page, and functionalities within a page. The tests are written to simulate both successful and unsuccessful instances. Unsuccessful instances are emulated by temporarily disabling the Cypress window’s network. As unsuccessful API requests in the application are handled by popping a ToastBox via the useHandleError hook, and these error handlings are asserted by checking the presence of the expected error description in a Toast.
+Test File
+Purpose
+Steps
+changeProfileDetails.ts
+Test the functionalities of changing basic profile details, and profile image.
+Change the first and last name, and location of profile
+Change the profile image
+Unsuccessful attempt to change profile details
+channelAdminFunctionalities.ts
+Test create, edit and delete channel functionality
+Create the channel, logged in as a user with UserRole to create a new channel
+Edit the channel name
+Delete the channel
+Unsuccessful attempt to create a new channel
+createNewPost.ts
+Test the functionalities and procedures to create, edit and delete a post.
+Select the post type to create a new post
+Craft and send the new post
+Edit the post
+Delete the post
+Unsuccessful attempt to create a new post
+createPostComment.ts
+Test create and delete comment, and view full post functionality
+Retrieve the first post and reveal the comment section in HomePage
+Create and send a new comment
+Delete the comment
+View full post by clicking the timestamp in PostBox, which will navigate to SinglePostPage
+Create and send a new comment
+Delete the comment
+Unsuccessful attempt to create a new comment
+newChat.ts
+Test functionalities of selecting users and create a new thread, send the first message, and continue sending messages and attachments.
+
+Test functionalities of sending a reply logged in as another user
+Select two users in NewChatBox to create a new thread
+Send the first message in NewChatBox
+That should auto direct to ChatBox with the thread, then send a new message with two attachments, one added by the ChatInputContainer, and the other via DragAndDrop
+Edit the text of the last message
+Auto trigger a reply by the sendReply custom command
+Send another message
+Delete the last message
+Login as another member of the thread
+Auto trigger a reply
+Send a final message
+retrySendMessage.ts
+Test functionalities of retrying and cancelling send/edit message attempts
+Create a new thread with one member
+Send a message
+Unsuccessful attempt to send another message
+Go online again and retry via the retry button in MessageDisplay
+Unsuccessful attempt to edit the previous message
+Cancel the edit attempt via the cancel button in MessageDisplay
+Unsuccessful attempt to edit the previous message again
+Retry the edit attempt
+searchChannels.ts
+Test functionalities of searching, joining and leaving a channel
+Search for an existing channel and go to it (User should not have joined the channel already)
+Join the channel
+Leave the channel
+Unsuccessful attempt to join the channel
+
+
+Custom Cypress Commands
+Available Commands
+Command
+Purpose
+visitRoute(route: string)
+Navigate to any routes within the application
+login(userCase?: number)
+Login and save the user to localStorage, without the hassle of using the regular QR Code method. Available user phone number and sign in code from 1 to 5.
+logout()
+Remove the user from localStorage
+loginSecondUser()
+Login and save as another user, mainly for sending replies purposes
+goOffline()
+To make the Cypress test window go offline by disabling the network
+assertOffline()
+Assert that goOffline is executed
+goOnline()
+To make the Cypress test window go back online by re enabling the network
+assertOnline()
+Assert that goOnline is executed
+sendReply(count?: number)
+Send a programmed reply, with 4 choices available, logged in as the second user, without using UI components.
+searchAndSelectUser(input: string)
+Search and select a user from an input field in NewChatBox
+typeAndSendMessage(input: string)
+Type and send text only message via the ChatInputContainer
+editLastMessage(input: string)
+Retrieve the last message in ChatBox and edit and send it via typeAndSendMessage.
+
+
+Add a Command
+To add a command, first declare the function name, expected arguments and return type in the cypress/support/index.ts file. Then, write the new command in cypress/support/commands.ts file via the Cypress.Commands.add syntax.
+Use a Command
+Using a custom command in Cypress is like using any other predefined commands, by first adding the cy. syntax, like for example cy.login().
+
+
+Analytics
+
+Analytics is implemented throughout the app, and components are able to send analytics events to the Core API by hitting the apiService.sendAnalytics endpoint. As apiService is already readily available in most components, passing the analytics function into it is therefore the chosen approach, rather than creating a custom hook, or a separate function.
+The sendAnalytics request takes in an AnalyticsEvents string enum value, and a vararg of strings. The enum lists out the available events for the Core API to receive, and the varargs are used to create interpolated string description, via the getAnalyticsDescription.
+When the sendAnalytics API eventually gets called, it will send the event (AnalyticsEvents), description, and a meta object.
+
+getAnalyticsDescription
+A function that returns the corresponding string description based on the provided AnalyticsEvents, via a switch statement. The function will also take in varargs to insert into the string. The varargs usually consist of the user’s profile name, channel name, and recipient’s full name.
+
+meta Object (Short commit hash and OS)
+Contains the os, which is just “web” in this case, and a short commit hash of the latest commit. The deployment configuration is designed to provide the latest commit hash when deploying the application, and returns the hash to the REACT_APP_SHORT_COMMIT_HASH environment variable. For Electron applications, this will be done manually.
+
+AnalyticsResponse
+The API will return an AnalyticsResponse object upon successfully sending the event, and the response consists of the following:
+Param
+Type
+id
+number
+user_id
+string
+event
+string
+description
+string
+created_at
+Date
+updated_at
+Date
+
+
+The application currently does not have a method to handle the API response or error response.
+
+Electron - Desktop Application
+
+Electron is a framework used in this application to convert the web application into a cross platform desktop application. For this web application, minimal effort is required to convert it into a desktop application. The additional code and configuration, and changes from the original application are stored in the electron branch.
+Note that only a machine running MacOS can compile a Mac Desktop application, and only a machine running Windows can compile a Windows Desktop application.
+
+Compile Hardware Configuration
+These are the machines used to compile the Electron applications, your mileage might vary.
+MacOS
+Operating System: macOS Monterey 12.3.1
+Hardware: Mac Studio (2022), Apple M1 Max, 32GB RAM
+Windows
+Operating System: Windows 10 Enterprise version 21H2
+Hardware: MSI GS65 Stealth, Intel Core i7-9750H, 32GB RAM
+
+Start the Desktop application
+1. Identical setup to running the web application
+Follow Step 1 and 2 in the Setup guide to prepare the application. You will likely need to run yarn install again as the Electron application requires additional dependencies.
+2. Run the application
+To run the application, inject the required dependencies as specified in Step 3 in the Setup guide, and run the application by the following command
+cd SPA
+yarn dev
+
+
+Compile the Desktop application
+1. Run the Desktop application
+Follow Step 1 in Start the Desktop application to ensure all the dependencies are downloaded. Running the application first before compiling it is encouraged.
+2. Compile the application
+To compile the application, inject the required dependencies as specified in Step 3 in the Setup guide, and run the application by the following command
+
+cd SPA
+yarn make
+
+
+
+Web to Desktop Conversion Process
+This application uses Electron Forge to create the Electron applications, and mainly follows this guide to convert the React application into an Electron application. Please use yarn add as opposed to npm install as specified by the guide to keep it consistent with this application.
+The functions for electron to create a browser window and initialise the application is located under public/electron.js.
+
+Changes from Web to Desktop
+HashRouter
+In the App.tsx, BrowseRouter is replaced by HashRouter so the application can navigate in a file-based environment.
+External Links
+To open external links from the application in the user’s default browser, the className ‘open-external-link’ must be used, as this class name matches with the declaration in public/electron.js to ignore the default behaviour of opening the link in a Electron browser window, and instead to open the external link in the default browser via shell.
+Declaration in public/electron.js
+const { shell } = require('electron');
+
+function createWindow() {
+  //...any existing code from the guide
+  const aAll = document.querySelectorAll(".open-external-link");
+
+  if (aAll && aAll.length) {
+    aAll.forEach(function(a) {
+      a.addEventListener("click", function(event) {
+        if (event.target) {
+          event.preventDefault();
+          let link = event.target.href;
+          shell.openExternal(link).catch(err =>    console.log(err));
+        }
+      });
+    });
+  }
+}
+Usage
+<a className="open-external-link" rel="noreferrer" href="https://115one.app" target="_blank">
+  View our site
+</a>
+
+
+No changes are needed for calling an external link between web and Electron application, but the Electron application just needs a class name that is queried in public/electron.js for opening external links. Calling the class name in the web application will not affect the application.
+
+Icon Creator and Usage
+Icon Directory and Creation
+The icon png used to create the icon for the desktop application is located under src/Assets/Images/115one_electron_icon.png. The electron icons can be found under the src/Assets/icons directory. To create new icons, run the following command:
+npx electron-icon-maker --input=src/Assets/Images/115one_electron_icon.png --output=src/Assets
+
+
+Using the Icon
+In the package.json file, specify the icon route via the following:
+"config": {
+  "forge": {
+    "packageConfig": {
+      // For MacOS
+      "icon": "src/Assets/icons/mac/icon"
+
+      //For Windows
+      "icon": "src/Assets/icons/win/icon"
+    }
+  }
+}
+
+
+
+Addition package.json config for Electron
+{
+  "name": "115.1-app",
+  "version": "0.1.0",
+  "main": "public/electron.js",
+  "homepage": ".",
+  "private": true,
+  "engines": {
+    "node": "16.16.0"
+  },
+  "author": {
+    "email": "admin@115.one",
+    "name": "115one"
+  },
+  "description": "115one Web App",
+
+  //…dependencies, devDependencies, scripts, eslintConfig, browserslist
+
+  "config": {
+    "forge": {
+      "packagerConfig": {
+        "icon": "src/Assets/icons/mac/icon",
+        "name": "115one",
+        "asar": true,
+        "protocols": [
+          {
+            "name": "Electron Fiddle",
+            "schemes": ["one-fifteen-one"]
+          }
+        ]
+      },
+      "makers": [
+        {
+          "name": "@electron-forge/maker-squirrel",
+          "config": {
+            "name": "115.1_app"
+          }
+        },
+        {
+          "name": "@electron-forge/maker-zip",
+          "platforms": [
+            "darwin"
+          ]
+        },
+        {
+          "name": "@electron-forge/maker-deb",
+          "config": {
+            "mimeType": ["x-scheme-handler/electron-fiddle"]
+          }
+        },
+        {
+          "name": "@electron-forge/maker-rpm",
+          "config": {}
+        }
+      ]
+    }
+  }
+}
+
+
