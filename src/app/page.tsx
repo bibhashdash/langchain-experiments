@@ -1,10 +1,10 @@
 'use client';
 
-import {RecursiveCharacterTextSplitter} from "langchain/text_splitter";
-import {createClient} from '@supabase/supabase-js';
-import {SupabaseVectorStore} from 'langchain/vectorstores/supabase'
-import {OpenAIEmbeddings} from 'langchain/embeddings/openai'
-import {useEffect, useState} from "react";
+// import {RecursiveCharacterTextSplitter} from "langchain/text_splitter";
+// import {createClient} from '@supabase/supabase-js';
+// import {SupabaseVectorStore} from 'langchain/vectorstores/supabase'
+// import {OpenAIEmbeddings} from 'langchain/embeddings/openai'
+import {useState} from "react";
 import {ChatOpenAI} from "@langchain/openai";
 import {PromptTemplate} from "@langchain/core/prompts";
 
@@ -15,36 +15,36 @@ export default function Home() {
   const [arrayOfAppNames, setArrayOfAppNames] = useState<Array<string>>([]);
   const [fetchingData, setFetchingData] = useState<boolean>(false);
 
-  const sbApiKey = process.env.NEXT_PUBLIC_SUPABASE_API_KEY
-  const sbUrl = process.env.NEXT_PUBLIC_SB_URL;
+  // const sbApiKey = process.env.NEXT_PUBLIC_SUPABASE_API_KEY
+  // const sbUrl = process.env.NEXT_PUBLIC_SB_URL;
   const openAIKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
 
-  const runThisStupidFunction = async () => {
-    try {
-      const result = await fetch("/devdocs.txt");
-      const text = await result.text();
-      const splitter = new RecursiveCharacterTextSplitter({
-        chunkSize: 600,
-      });
-
-      const output = await splitter.createDocuments([text]);
-
-      const client = await createClient(sbUrl, sbApiKey)
-      await SupabaseVectorStore.fromDocuments(
-        output,
-        new OpenAIEmbeddings({
-          openAIApiKey: openAIKey
-        }),
-        {
-          client,
-          tableName: 'documents',
-        }
-      );
-
-    } catch (e) {
-      console.log(e);
-    }
-  }
+  // const runThisStupidFunction = async () => {
+  //   try {
+  //     const result = await fetch("/devdocs.txt");
+  //     const text = await result.text();
+  //     const splitter = new RecursiveCharacterTextSplitter({
+  //       chunkSize: 600,
+  //     });
+  //
+  //     const output = await splitter.createDocuments([text]);
+  //
+  //     const client = await createClient(sbUrl, sbApiKey)
+  //     await SupabaseVectorStore.fromDocuments(
+  //       output,
+  //       new OpenAIEmbeddings({
+  //         openAIApiKey: openAIKey
+  //       }),
+  //       {
+  //         client,
+  //         tableName: 'documents',
+  //       }
+  //     );
+  //
+  //   } catch (e) {
+  //     console.log(e);
+  //   }
+  // }
 
   const runThisOtherStupidFunction = (userInput: string) => {
     try {
