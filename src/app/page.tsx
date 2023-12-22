@@ -12,6 +12,8 @@ export default function Home() {
 
 
   const [userInputValue, setUserInputValue] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [greeting, setGreeting] = useState<string>("");
   const [arrayOfAppNames, setArrayOfAppNames] = useState<Array<string>>([]);
   const [fetchingData, setFetchingData] = useState<boolean>(false);
 
@@ -66,19 +68,35 @@ export default function Home() {
     }
   }
 
+  const generateGreeting = () => {
+    try {
+      const llm = new ChatOpenAI({openAIApiKey: openAIKey});
+      const greetingTemplate = 'Translate the word hello from English into a random language. Translation: ';
+
+      const greetingPrompt = PromptTemplate.fromTemplate(greetingTemplate);
+      const greetingChain = greetingPrompt.pipe(llm);
+      const response = greetingChain.invoke({});
+      return response.then(res => res.content);
+    } catch (e) {
+      console.log(e);
+    }
+  }
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    setSearchQuery(userInputValue);
+    setUserInputValue("");
     setFetchingData(true);
     event.preventDefault();
-
+    generateGreeting()?.then(res => setGreeting(res.toString()));
     runThisOtherStupidFunction(userInputValue)?.then(res => setArrayOfAppNames(res.toString().split('\n')))
     setFetchingData(false);
   }
 
   return (
-    <main className="h-screen p-6">
+    <main className="h-screen p-6 w-full flex flex-col items-center">
       <h1 className="text-2xl font-bold">App Name Generator</h1>
       <p>What is the main purpose of your app?</p>
-      <form onSubmit={event => handleSubmit(event)}>
+      <form onSubmit={event => handleSubmit(event)} className="flex gap-6 p-4 justify-center">
         <input className="px-2 py-4 rounded-md" value={userInputValue} onChange={e => setUserInputValue(e.target.value)}/>
         <button type={"submit"} className="w-fit px-4 py-2 border-2 border-black mt-4 rounded-lg">Submit</button>
       </form>
@@ -93,7 +111,10 @@ export default function Home() {
 
 
         ) : (
-          <ul>
+          <ul className="flex flex-col items-center gap-2">
+            {
+              greeting && (<p>{greeting.slice(0, greeting.indexOf('('))}!! Here are some suggestions for app names related to <b className="underline text-red-500">{searchQuery}</b></p>)
+            }
             {
               arrayOfAppNames.map(item => (
                 <li>{item}</li>
