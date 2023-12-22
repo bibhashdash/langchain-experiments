@@ -4,7 +4,7 @@
 // import {createClient} from '@supabase/supabase-js';
 // import {SupabaseVectorStore} from 'langchain/vectorstores/supabase'
 // import {OpenAIEmbeddings} from 'langchain/embeddings/openai'
-import {useState} from "react";
+import {FormEvent, useState} from "react";
 import {ChatOpenAI} from "@langchain/openai";
 import {PromptTemplate} from "@langchain/core/prompts";
 
@@ -66,11 +66,11 @@ export default function Home() {
     }
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     setFetchingData(true);
     event.preventDefault();
 
-    runThisOtherStupidFunction(userInputValue).then(res => setArrayOfAppNames(res.toString().split('\n')))
+    runThisOtherStupidFunction(userInputValue)?.then(res => setArrayOfAppNames(res.toString().split('\n')))
     setFetchingData(false);
   }
 
@@ -78,7 +78,7 @@ export default function Home() {
     <main className="h-screen p-6">
       <h1 className="text-2xl font-bold">App Name Generator</h1>
       <p>What is the main purpose of your app?</p>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={event => handleSubmit(event)}>
         <input className="px-2 py-4 rounded-md" value={userInputValue} onChange={e => setUserInputValue(e.target.value)}/>
         <button type={"submit"} className="w-fit px-4 py-2 border-2 border-black mt-4 rounded-lg">Submit</button>
       </form>
